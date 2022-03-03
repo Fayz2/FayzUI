@@ -1,4 +1,4 @@
-**FayzUI is a lightweight, functional, battle tested and stable interface for 3.3.5 WoW clients that I've used for years on various servers and is mainly driven by ElvUI which is a total rewrite of the aged 3.3.5 default UI offering modern actionbars, UI scales, unitframes, bags, tooltips, buff tracking, nameplates/threat plates & more!**  
+**FayzUI is a lightweight, functional, battle tested and stable interface for 3.3.5 WoW clients that I've used for years on various servers and is mainly driven by ElvUI which is a total rewrite of the aged 3.3.5 default UI offering modern actionbars, UI scales, unitframes, bags, tooltips, buff tracking, nameplates/threat plates & more. Included with this package is a highly customized ElvUI profile that will serve as the perfect foundation for your own UI.**  
 
 
 ## Screenshots
@@ -29,7 +29,7 @@
 
 ## Addon Commands
 
-    /elvui      Open the configuration GUI  
+    /elvui      Open the configuration GUI. Toggle Anchors will allow you to move UI elements anywhere you want.
     /kb         Configure Keybinds 
 
 
