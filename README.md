@@ -6,11 +6,11 @@
 ![Screenshot](https://i.imgur.com/OBMK0T3.jpg)
 
 ## Included Addons
-*  **ElvUI 6.06** - The most stable version for 3.3.5 with custom fixes by myself
+*  **ElvUI 6.06** - The most stable version for 3.3.5 with custom fixes by myself.
 *  **WeakAuras** -  A framework that allows the display of highly customizable graphics to indicate buffs, debuffs etc.
 *  **Skada** - Lightweight DPS and Threat meter.
 *  **Clique** - The ability to bind spells to click casts.
-*  **Postal** - Enhanced mailbox
+*  **Postal** - Enhanced mailbox.
 *  **AtlasLoot** - An Atlas of every item in the game database.
 *  **Mapster** - Enhanced world map.
 *  **MicroAuctionator** - Custom Auctionator slimmed down specifically for ChromieCraft.
