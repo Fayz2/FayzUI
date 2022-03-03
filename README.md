@@ -2,6 +2,7 @@
    
  *Included with this package is a highly customized ElvUI profile I've created that will serve as a solid foundation for your own UI. Users can also freely import retail ElvUI profiles with no issues!* 
 
+ *Note: My profile natively supports 1440p. 1080p gamers will need to adjust UI scale in the ElvUI config & resize elements as needed. 
 
 ## Screenshots
 
@@ -27,7 +28,7 @@
 4. Start WoW, login a character and when prompted complete the initial ElvUI setup wizard.
 5. Type /elvui and navigate to profiles and import the string I've included in elvprofile.txt
 6. Reload your UI with the /rl command.
-7. Adjust UI scale in ElvUI settings and resize things as needed. This UI natively supports 1440p so 1080p users will need do some light tinkering so treat my profile as a template!
+7. Adjust UI scale in ElvUI settings and resize things as needed. This UI natively supports 1440p so 1080p users will need to do some light tinkering so treat my profile as a template!
 
 ## Addon Commands
 
