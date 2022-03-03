@@ -1,4 +1,4 @@
-**FayzUI is a compilation created using ElvUI to form a complete and fully fuctional interface for 3.3.5 WoW clients.**  
+**FayzUI is a lightweight, functional, battle tested and most importantly stable interface for 3.3.5 WoW clients that I've used for years.**  
 
 
 ## Screenshots
@@ -25,7 +25,7 @@
 4. Start WoW, login a character and when prompted complete the initial ElvUI setup wizard.
 5. Type /elvui and navigate to profiles and import the string I've included in elvprofile.txt
 6. Reload your UI with the /rl command.
-7. Enjoy!
+7. Ensure Interface/Sound and Video settings are setup correctly and enjoy your new UI!
 
 ## Addon Commands
 
