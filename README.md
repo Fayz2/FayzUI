@@ -14,16 +14,18 @@
 *  **AtlasLoot** 
 *  **Mapster**
 *  **MicroAuctionator**  
-*  **AH Deposit Fixer** -    
-*  **Combat Log Fixer** - Ensures your DPS meter never breaks due to an error in the 3.3.5 client.  
+*  **AH Deposit Fixer**   
+*  **Combat Log Fixer**  
  
 
 ## Installation
-1. Backup your current Interface & WTF folders or make a new client (Recommended)   
-2. Delete Interface/WTF & unpack the ZIP. Place the provided FayzUI Interface/WTF folders in the WoW directory.
+1. Backup your current Interface & WTF folders somewhere safe (Recommended)   
+2. Delete Interface & WTF and unpack the ZIP. Place the provided FayzUI Interface/WTF folders in the WoW directory.
 3. Navigate to /WTF, find and rename the "your-account" folder to your Chromie account name in all caps.   
-4. Rename the "your-character" folder to your characters name, make a copy and rename for any alts on that account.  
-5. Start WoW and configure Video, Sound, Interface, Keybinds and Macros.
+4. Start WoW, login a character and when prompted complete the initial ElvUI setup wizard.
+5. Type /elvui and navigate to profiles and import the string I've included in elvprofile.txt
+6. Reload your UI with the /rl command.
+7. Enjoy!
 
 ## Addon Commands
 
