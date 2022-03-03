@@ -7,15 +7,15 @@
 
 ## Included Addons
 *  **ElvUI 6.06** - The most stable version for 3.3.5 with custom fixes by myself
-*  **WeakAuras** 
-*  **Skada**   
-*  **Clique**
-*  **Postal**
-*  **AtlasLoot** 
-*  **Mapster**
-*  **MicroAuctionator**  
-*  **AH Deposit Fixer**   
-*  **Combat Log Fixer**  
+*  **WeakAuras** -  A framework that allows the display of highly customizable graphics to indicate buffs, debuffs etc.
+*  **Skada** - Lightweight DPS and Threat meter.
+*  **Clique** - The ability to bind spells to click casts.
+*  **Postal** - Enhanced mailbox
+*  **AtlasLoot** - An Atlas of every item in the game database.
+*  **Mapster** - Enhanced world map.
+*  **MicroAuctionator** - Custom Auctionator slimmed down specifically for ChromieCraft.
+*  **AH Deposit Fixer** - ChromieCraft exclusive.   
+*  **Combat Log Fixer** - Ensures your DPS meter doesn't break due to a bug in the 3.3.5 client.
  
 
 ## Installation
