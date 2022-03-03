@@ -25,7 +25,7 @@
 4. Start WoW, login a character and when prompted complete the initial ElvUI setup wizard.
 5. Type /elvui and navigate to profiles and import the string I've included in elvprofile.txt
 6. Reload your UI with the /rl command.
-7. Ensure Interface/Sound and Video settings are setup correctly and enjoy your new UI!
+7. Adjust UI scale in ElvUI settings and resize things as needed. This UI natively supports 1440p so 1080p users will need do some light tinkering so treat my profile as a template!
 
 ## Addon Commands
 
