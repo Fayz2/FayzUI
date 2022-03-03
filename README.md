@@ -2,7 +2,7 @@
    
  *Included with this package is a highly customized ElvUI profile I've created that will serve as a solid foundation for your own UI. Users can also freely import retail ElvUI profiles with no issues!* 
 
- *Note: My profile natively supports 1440p. 1080p gamers will need to adjust UI scale in the ElvUI config & resize elements as needed. 
+ **Note: My profile natively supports 1440p. 1080p gamers will need to adjust UI scale in the ElvUI config & resize elements as needed.** 
 
 ## Screenshots
 
