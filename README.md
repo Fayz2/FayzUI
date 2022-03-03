@@ -11,7 +11,7 @@
 *  **Skada** - Lightweight DPS and Threat meter.
 *  **Clique** - The ability to bind spells to click casts.
 *  **Postal** - Enhanced mailbox.
-*  **AtlasLoot** - An Atlas of every item in the game database.
+*  **AtlasLoot** - An atlas of every item in the game database.
 *  **Mapster** - Enhanced world map.
 *  **MicroAuctionator** - Custom Auctionator slimmed down specifically for ChromieCraft.
 *  **AH Deposit Fixer** - ChromieCraft exclusive.   
