@@ -114,10 +114,14 @@ function E:CheckRole()
 	if type(self.ClassRole[self.myclass]) == "string" then
 		role = self.ClassRole[self.myclass]
 	elseif talentTree then
-		if self.myclass == "DRUID" and talentTree == 2 then
-			role = select(5, GetTalentInfo(talentTree, 22)) > 0 and "Tank" or "Melee"
-		elseif self.myclass == "DEATHKNIGHT" and talentTree == 2 then
-			role = select(5, GetTalentInfo(talentTree, 25)) > 0 and "Tank" or "Melee"
+		if self.myclass == "DRUID" then
+			role = select(3,GetShapeshiftFormInfo(1)) ~= nil and "Tank" or "Melee"
+		elseif self.myclass == "DEATHKNIGHT" then
+			role = select(3,GetShapeshiftFormInfo(2)) ~= nil and "Tank" or "Melee"
+		elseif self.myclass == "PALADIN" then
+			role = UnitAura("player", "Righteous Fury") and "Tank" or "Melee"
+		elseif self.myclass == "WARRIOR" then
+			role = select(3,GetShapeshiftFormInfo(2)) ~= nil and "Tank" or "Melee"
 		else
 			role = self.ClassRole[self.myclass][talentTree]
 		end
@@ -340,6 +344,8 @@ function E:LoadAPI()
 	self:RegisterEvent("PLAYER_ENTERING_WORLD")
 	self:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED", "CheckRole")
 	self:RegisterEvent("PLAYER_TALENT_UPDATE", "CheckRole")
+	self:RegisterEvent("UPDATE_SHAPESHIFT_FORM", "CheckRole")
+	self:RegisterEvent("UNIT_AURA", "CheckRole")
 	self:RegisterEvent("CHARACTER_POINTS_CHANGED", "CheckRole")
 	self:RegisterEvent("UNIT_INVENTORY_CHANGED", "CheckRole")
 	self:RegisterEvent("UPDATE_BONUS_ACTIONBAR", "CheckRole")
