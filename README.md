@@ -11,6 +11,7 @@
 ## Included Addons
 *  **ElvUI 6.06** - The most stable version for 3.3.5 with custom fixes by myself.
 *  **WeakAuras** -  A framework that allows the display of highly customizable graphics to indicate buffs, debuffs etc.
+*  **Talented** -  Talented lets you save talents to profiles allowing for easy restore and spec swaps.
 *  **Skada** - Lightweight DPS and Threat meter.
 *  **Clique** - The ability to bind spells to click casts.
 *  **Postal** - Enhanced mailbox.
