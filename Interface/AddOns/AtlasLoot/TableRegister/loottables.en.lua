@@ -715,6 +715,8 @@ end
 	AtlasLoot_TableNames["MCRagnaros"] = { BabbleBoss["Ragnaros"], "AtlasLootOriginalWoW" };
 	AtlasLoot_TableNames["MCRANDOMBOSSDROPPS"] = { "Random Boss Drops", "AtlasLootOriginalWoW" };
 	AtlasLoot_TableNames["MCTrashMobs"] = { AL["Trash Mobs"].." ("..BabbleZone["Molten Core"]..")", "AtlasLootOriginalWoW" };
+  -- Onyxia 60
+        AtlasLoot_TableNames["Onyxia60_1"] = { BabbleZone["Onyxia's Lair"], "AtlasLootOriginalWoW" };
   -- Ragefire Chasm
 	AtlasLoot_TableNames["RagefireChasm"] = { BabbleZone["Ragefire Chasm"], "AtlasLootOriginalWoW" };
   -- Razorfen Downs
@@ -1243,6 +1245,8 @@ end
 
   -- Azuregos
 	AtlasLoot_TableNames["WorldBossesClassic"] = { BabbleBoss["Azuregos"], "AtlasLootOriginalWoW" };
+  -- Lord Kazzak
+	AtlasLoot_TableNames["WorldBossesClassic_2"] = { BabbleBoss["Lord Kazzak"], "AtlasLootOriginalWoW" };
   -- Kazzak/Doomwalker
 	AtlasLoot_TableNames["WorldBossesBC"] = { BabbleBoss["Doom Lord Kazzak"].." / "..BabbleBoss["Doomwalker"], "AtlasLootBurningCrusade" };
   -- Emrald Dragons

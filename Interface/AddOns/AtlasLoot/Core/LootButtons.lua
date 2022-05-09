@@ -243,6 +243,10 @@ function AtlasLootItem_OnClick(arg1)
         --If control-clicked, use the dressing room
         elseif(IsControlKeyDown() and iteminfo) then
             DressUpItemLink(itemLink);
+        -- elseif(IsControlKeyDown() and IsShiftKeyDown() and iteminfo) then
+            -- local additemMSG == [".additem 16707"]
+            -- SendChatMessage(.additem 16707, nil, nil, 1);
+			-- end
         elseif(IsAltKeyDown() and (this.itemID ~= 0)) then
             if AtlasLootItemsFrame.refresh[1] == "WishList" then
                 AtlasLoot_DeleteFromWishList(this.itemID);
