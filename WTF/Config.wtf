@@ -1,6 +1,6 @@
 SET locale "enUS"
 SET hwDetect "0"
-SET gxResolution "1920x1080"
+SET gxResolution "2560x1440"
 SET gxRefresh "120"
 SET gxMultisampleQuality "0.000000"
 SET gxFixLag "0"
