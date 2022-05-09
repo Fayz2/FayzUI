@@ -9,7 +9,7 @@
 ![Screenshot](https://i.imgur.com/OBMK0T3.jpg)
 
 ## Included Addons
-*  **ElvUI 6.06** - The most stable version for 3.3.5 with custom fixes by myself.
+*  **ElvUI 6.06** - The most stable version and final release from Bunny with update prompts disabled.
 *  **WeakAuras** -  A framework that allows the display of highly customizable graphics to indicate buffs, debuffs etc.
 *  **Talented** -  Talented lets you save talents to profiles allowing for easy restore and spec swaps.
 *  **Skada Revisited** - Lightweight DPS and Threat meter currently maintained by Bkader.
