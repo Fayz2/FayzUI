@@ -1,5 +1,5 @@
 ﻿## Interface: 30300
-## Title: AtlasLoot
+## Title: AtlasLoot_Chromie
 ## Notes: Shows the possible loot from the bosses
 ## Author: Hegarol
 ## Version: v5.11.04
