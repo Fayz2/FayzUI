@@ -17,7 +17,7 @@
 *  **Postal** - Enhanced mailbox.
 *  **AtlasLoot** - An atlas of every item in the game database. Updated for Chromie by Sonny.
 *  **Mapster** - Enhanced world map.
-*  **MicroAuctionator** - Custom Auctionator slimmed down specifically for ChromieCraft.
+*  **MicroAuctionator** - Custom Auctionator slimmed down specifically for ChromieCraft, Scanning options removed.
 *  **AH Deposit Fixer** - ChromieCraft exclusive.    
 
 ## Installation
