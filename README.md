@@ -39,10 +39,10 @@
 
 ## Credits
 
-ElvUI - https://github.com/ElvUI-WotLK/ElvUI
-Skada - https://github.com/bkader/Skada-WoTLK
-WeakAuras - https://github.com/Bunny67/WeakAuras-WotLK
-AtlasLoot Chromie Edit - Sonny
+ElvUI - https://github.com/ElvUI-WotLK/ElvUI  
+Skada - https://github.com/bkader/Skada-WoTLK  
+WeakAuras - https://github.com/Bunny67/WeakAuras-WotLK  
+AtlasLoot Chromie Edit - Sonny  
 
 
 
