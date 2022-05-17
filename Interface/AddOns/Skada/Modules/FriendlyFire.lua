@@ -8,7 +8,7 @@ Skada:AddLoadableModule("Friendly Fire", function(L)
 	local spelltargetmod = spellmod:NewModule(L["Damage spell targets"])
 	local ignoredSpells = Skada.dummyTable -- Edit Skada\Core\Tables.lua
 
-	local pairs, ipairs, format = pairs, ipairs, string.format
+	local pairs, format = pairs, string.format
 	local GetSpellInfo, T = Skada.GetSpellInfo or GetSpellInfo, Skada.Table
 	local _
 
@@ -21,7 +21,7 @@ Skada:AddLoadableModule("Friendly Fire", function(L)
 			set.friendfire = (set.friendfire or 0) + dmg.amount
 
 			-- to save up memory, we only record the rest to the current set.
-			if set == Skada.total or not dmg.spellid then return end
+			if (set == Skada.total and not Skada.db.profile.totalidc) or not dmg.spellid then return end
 
 			-- spell
 			local spell = player.friendfirespells and player.friendfirespells[dmg.spellid]
@@ -34,11 +34,8 @@ Skada:AddLoadableModule("Friendly Fire", function(L)
 
 			-- target
 			if dmg.dstName then
-				local actor = Skada:GetActor(set, dmg.dstGUID, dmg.dstName, dmg.dstFlags)
-				if actor then
-					spell.targets = spell.targets or {}
-					spell.targets[dmg.dstName] = (spell.targets[dmg.dstName] or 0) + dmg.amount
-				end
+				spell.targets = spell.targets or {}
+				spell.targets[dmg.dstName] = (spell.targets[dmg.dstName] or 0) + dmg.amount
 			end
 		end
 	end
@@ -68,7 +65,6 @@ Skada:AddLoadableModule("Friendly Fire", function(L)
 				dmg.amount = (amount or 0) + (absorbed or 0)
 
 				Skada:DispatchSets(log_damage, dmg)
-				log_damage(Skada.total, dmg)
 			end
 		end
 	end
@@ -79,7 +75,7 @@ Skada:AddLoadableModule("Friendly Fire", function(L)
 	end
 
 	function targetmod:Update(win, set)
-		win.title = format(L["%s's targets"], win.actorname or L.Unknown)
+		win.title = format(L["%s's targets"], win.actorname or L["Unknown"])
 
 		local actor = set and set:GetPlayer(win.actorid, win.actorname)
 		local total = actor and actor.friendfire or 0
@@ -121,7 +117,7 @@ Skada:AddLoadableModule("Friendly Fire", function(L)
 	end
 
 	function spellmod:Update(win, set)
-		win.title = L["actor damage"](win.actorname or L.Unknown)
+		win.title = L["actor damage"](win.actorname or L["Unknown"])
 
 		local actor = set and set:GetPlayer(win.actorid, win.actorname)
 		local total = actor and actor.friendfire or 0
@@ -156,11 +152,11 @@ Skada:AddLoadableModule("Friendly Fire", function(L)
 
 	function spelltargetmod:Enter(win, id, label)
 		win.spellid, win.spellname = id, label
-		win.title = format(L["%s's <%s> damage"], win.actorname or L.Unknown, label)
+		win.title = format(L["%s's <%s> damage"], win.actorname or L["Unknown"], label)
 	end
 
 	function spelltargetmod:Update(win, set)
-		win.title = format(L["%s's <%s> damage"], win.actorname or L.Unknown, win.spellname or L.Unknown)
+		win.title = format(L["%s's <%s> damage"], win.actorname or L["Unknown"], win.spellname or L["Unknown"])
 		if not win.spellid then return end
 
 		local actor = set and set:GetPlayer(win.actorid, win.actorname)
@@ -184,12 +180,12 @@ Skada:AddLoadableModule("Friendly Fire", function(L)
 				d.id = targetname
 				d.label = targetname
 
-				local actor = set:GetActor(targetname)
-				if actor then
-					d.id = actor.id or targetname
-					d.class = actor.class
-					d.role = actor.role
-					d.spec = actor.spec
+				local tactor = set:GetActor(targetname)
+				if tactor then
+					d.id = tactor.id or targetname
+					d.class = tactor.class
+					d.role = tactor.role
+					d.spec = tactor.spec
 				end
 
 				d.value = amount
@@ -216,8 +212,9 @@ Skada:AddLoadableModule("Friendly Fire", function(L)
 			end
 
 			local nr = 0
-			for _, player in ipairs(set.players) do
-				if (not win.class or win.class == player.class) and (player.friendfire or 0) > 0 then
+			for i = 1, #set.players do
+				local player = set.players[i]
+				if player and player.friendfire and (not win.class or win.class == player.class) then
 					nr = nr + 1
 					local d = win:nr(nr)
 
@@ -251,10 +248,13 @@ Skada:AddLoadableModule("Friendly Fire", function(L)
 			click2 = targetmod,
 			click4 = Skada.FilterClass,
 			click4_label = L["Toggle Class Filter"],
-			nototalclick = {spellmod, targetmod},
 			columns = {Damage = true, DPS = false, Percent = true, sDPS = false, sPercent = true},
 			icon = [[Interface\Icons\inv_gizmo_supersappercharge]]
 		}
+
+		-- no total click.
+		spellmod.nototal = true
+		targetmod.nototal = true
 
 		Skada:RegisterForCL(
 			SpellDamage,
@@ -263,7 +263,6 @@ Skada:AddLoadableModule("Friendly Fire", function(L)
 			"RANGE_DAMAGE",
 			"SPELL_BUILDING_DAMAGE",
 			"SPELL_DAMAGE",
-			"SPELL_EXTRA_ATTACKS",
 			"SPELL_PERIODIC_DAMAGE",
 			"SWING_DAMAGE",
 			{dst_is_interesting_nopets = true, src_is_interesting_nopets = true}
@@ -290,10 +289,11 @@ Skada:AddLoadableModule("Friendly Fire", function(L)
 		T.clear(dmg)
 
 		if (set.friendfire or 0) == 0 then return end
-		for _, p in ipairs(set.players) do
-			if p.friendfire and p.friendfire == 0 then
+		for i = 1, #set.players do
+			local p = set.players[i]
+			if p and p.friendfire and p.friendfire == 0 then
 				p.friendfirespells = nil
-			elseif p.friendfirespells then
+			elseif p and p.friendfirespells then
 				for spellid, spell in pairs(p.friendfirespells) do
 					if spell.amount == 0 then
 						p.friendfirespells[spellid] = nil
@@ -330,8 +330,6 @@ Skada:AddLoadableModule("Friendly Fire", function(L)
 									cacheTable[name].class = actor.class
 									cacheTable[name].role = actor.role
 									cacheTable[name].spec = actor.spec
-								else
-									cacheTable[name].class = "UNKNOWN"
 								end
 							end
 						end

@@ -1,6 +1,6 @@
 local Skada = Skada
 
-local pairs, ipairs, tostring, format = pairs, ipairs, tostring, string.format
+local pairs, tostring, format = pairs, tostring, string.format
 local GetSpellInfo = Skada.GetSpellInfo or GetSpellInfo
 local GetSpellLink = Skada.GetSpellLink or GetSpellLink
 local playerPrototype = Skada.playerPrototype
@@ -211,7 +211,7 @@ Skada:AddLoadableModule("CC Done", function(L)
 			set.ccdone = (set.ccdone or 0) + 1
 
 			-- saving this to total set may become a memory hog deluxe.
-			if set == Skada.total then return end
+			if set == Skada.total and not Skada.db.profile.totalidc then return end
 
 			-- record the spell.
 			local spell = player.ccdonespells and player.ccdonespells[cc.spellid]
@@ -224,11 +224,8 @@ Skada:AddLoadableModule("CC Done", function(L)
 
 			-- record the target.
 			if cc.dstName then
-				local actor = Skada:GetActor(set, cc.dstGUID, cc.dstName, cc.dstFlags)
-				if actor then
-					spell.targets = spell.targets or {}
-					spell.targets[cc.dstName] = (spell.targets[cc.dstName] or 0) + 1
-				end
+				spell.targets = spell.targets or {}
+				spell.targets[cc.dstName] = (spell.targets[cc.dstName] or 0) + 1
 			end
 		end
 	end
@@ -249,7 +246,6 @@ Skada:AddLoadableModule("CC Done", function(L)
 			data.spellid = spellid
 
 			Skada:DispatchSets(log_ccdone, data)
-			log_ccdone(Skada.total, data)
 		end
 	end
 
@@ -259,7 +255,7 @@ Skada:AddLoadableModule("CC Done", function(L)
 	end
 
 	function playermod:Update(win, set)
-		win.title = format(L["%s's control spells"], win.actorname or L.Unknown)
+		win.title = format(L["%s's control spells"], win.actorname or L["Unknown"])
 
 		local player = set and set:GetPlayer(win.actorid, win.actorname)
 		local total = player and player.ccdone or 0
@@ -298,7 +294,7 @@ Skada:AddLoadableModule("CC Done", function(L)
 	end
 
 	function targetmod:Update(win, set)
-		win.title = format(L["%s's control targets"], win.actorname or L.Unknown)
+		win.title = format(L["%s's control targets"], win.actorname or L["Unknown"])
 
 		local player = set and set:GetPlayer(win.actorid, win.actorname)
 		local total = player and player.ccdone or 0
@@ -343,8 +339,9 @@ Skada:AddLoadableModule("CC Done", function(L)
 			end
 
 			local nr = 0
-			for _, player in ipairs(set.players) do
-				if (not win.class or win.class == player.class) and (player.ccdone or 0) > 0 then
+			for i = 1, #set.players do
+				local player = set.players[i]
+				if player and player.ccdone and (not win.class or win.class == player.class) then
 					nr = nr + 1
 					local d = win:nr(nr)
 
@@ -377,10 +374,13 @@ Skada:AddLoadableModule("CC Done", function(L)
 			click2 = targetmod,
 			click4 = Skada.FilterClass,
 			click4_label = L["Toggle Class Filter"],
-			nototalclick = {playermod, targetmod},
 			columns = {Count = true, Percent = false, sPercent = false},
 			icon = [[Interface\Icons\spell_frost_chainsofice]]
 		}
+
+		-- no total click.
+		playermod.nototal = true
+		targetmod.nototal = true
 
 		Skada:RegisterForCL(
 			AuraApplied,
@@ -423,8 +423,6 @@ Skada:AddLoadableModule("CC Done", function(L)
 								tbl[name].class = actor.class
 								tbl[name].role = actor.role
 								tbl[name].spec = actor.spec
-							else
-								tbl[name].class = "UNKNOWN"
 							end
 						end
 					end
@@ -465,7 +463,7 @@ Skada:AddLoadableModule("CC Taken", function(L)
 			set.cctaken = (set.cctaken or 0) + 1
 
 			-- saving this to total set may become a memory hog deluxe.
-			if set == Skada.total then return end
+			if set == Skada.total and not Skada.db.profile.totalidc then return end
 
 			-- record the spell.
 			local spell = player.cctakenspells and player.cctakenspells[cc.spellid]
@@ -478,11 +476,8 @@ Skada:AddLoadableModule("CC Taken", function(L)
 
 			-- record the source.
 			if cc.srcName then
-				local actor = Skada:GetActor(set, cc.srcGUID, cc.srcName, cc.srcFlags)
-				if actor then
-					spell.sources = spell.sources or {}
-					spell.sources[cc.srcName] = (spell.sources[cc.srcName] or 0) + 1
-				end
+				spell.sources = spell.sources or {}
+				spell.sources[cc.srcName] = (spell.sources[cc.srcName] or 0) + 1
 			end
 		end
 	end
@@ -504,7 +499,6 @@ Skada:AddLoadableModule("CC Taken", function(L)
 			data.spellid = spellid
 
 			Skada:DispatchSets(log_cctaken, data)
-			log_cctaken(Skada.total, data)
 		end
 	end
 
@@ -514,7 +508,7 @@ Skada:AddLoadableModule("CC Taken", function(L)
 	end
 
 	function playermod:Update(win, set)
-		win.title = format(L["%s's control spells"], win.actorname or L.Unknown)
+		win.title = format(L["%s's control spells"], win.actorname or L["Unknown"])
 
 		local player = set and set:GetPlayer(win.actorid, win.actorname)
 		local total = player and player.cctaken or 0
@@ -553,7 +547,7 @@ Skada:AddLoadableModule("CC Taken", function(L)
 	end
 
 	function sourcemod:Update(win, set)
-		win.title = format(L["%s's control sources"], win.actorname or L.Unknown)
+		win.title = format(L["%s's control sources"], win.actorname or L["Unknown"])
 
 		local player = set and set:GetPlayer(win.actorid, win.actorname)
 		local total = player and player.cctaken or 0
@@ -598,8 +592,9 @@ Skada:AddLoadableModule("CC Taken", function(L)
 			end
 
 			local nr = 0
-			for _, player in ipairs(set.players) do
-				if (not win.class or win.class == player.class) and (player.cctaken or 0) > 0 then
+			for i = 1, #set.players do
+				local player = set.players[i]
+				if player and player.cctaken and (not win.class or win.class == player.class) then
 					nr = nr + 1
 					local d = win:nr(nr)
 
@@ -632,10 +627,13 @@ Skada:AddLoadableModule("CC Taken", function(L)
 			click2 = sourcemod,
 			click4 = Skada.FilterClass,
 			click4_label = L["Toggle Class Filter"],
-			nototalclick = {playermod, sourcemod},
 			columns = {Count = true, Percent = false, sPercent = false},
 			icon = [[Interface\Icons\spell_magic_polymorphrabbit]]
 		}
+
+		-- no total click.
+		playermod.nototal = true
+		sourcemod.nototal = true
 
 		Skada:RegisterForCL(
 			AuraApplied,
@@ -678,8 +676,6 @@ Skada:AddLoadableModule("CC Taken", function(L)
 								tbl[name].class = actor.class
 								tbl[name].role = actor.role
 								tbl[name].spec = actor.spec
-							else
-								tbl[name].class = "UNKNOWN"
 							end
 						end
 					end
@@ -711,7 +707,7 @@ Skada:AddLoadableModule("CC Breaks", function(L)
 			set.ccbreak = (set.ccbreak or 0) + 1
 
 			-- saving this to total set may become a memory hog deluxe.
-			if set == Skada.total then return end
+			if set == Skada.total and not Skada.db.profile.totalidc then return end
 
 			-- record the spell.
 			local spell = player.ccbreakspells and player.ccbreakspells[cc.spellid]
@@ -724,11 +720,8 @@ Skada:AddLoadableModule("CC Breaks", function(L)
 
 			-- record the target.
 			if cc.dstName then
-				local actor = Skada:GetActor(set, cc.dstGUID, cc.dstName, cc.dstFlags)
-				if actor then
-					spell.targets = spell.targets or {}
-					spell.targets[cc.dstName] = (spell.targets[cc.dstName] or 0) + 1
-				end
+				spell.targets = spell.targets or {}
+				spell.targets[cc.dstName] = (spell.targets[cc.dstName] or 0) + 1
 			end
 		end
 	end
@@ -754,7 +747,6 @@ Skada:AddLoadableModule("CC Breaks", function(L)
 		data.extraspellid = extraspellid
 
 		Skada:DispatchSets(log_ccbreak, data)
-		log_ccbreak(Skada.total, data)
 
 		-- Optional announce
 		srcName = srcName_modified or srcName
@@ -778,9 +770,9 @@ Skada:AddLoadableModule("CC Breaks", function(L)
 
 			-- Go ahead and announce it.
 			if extraspellid or extraspellname then
-				Skada:SendChat(format(L["%s on %s removed by %s's %s"], spellname, dstName, srcName, GetSpellLink(extraspellid or extraspellname)), "RAID", "preset", true)
+				Skada:SendChat(format(L["%s on %s removed by %s's %s"], spellname, dstName, srcName, GetSpellLink(extraspellid or extraspellname)), "RAID", "preset")
 			else
-				Skada:SendChat(format(L["%s on %s removed by %s"], spellname, dstName, srcName), "RAID", "preset", true)
+				Skada:SendChat(format(L["%s on %s removed by %s"], spellname, dstName, srcName), "RAID", "preset")
 			end
 		end
 	end
@@ -791,7 +783,7 @@ Skada:AddLoadableModule("CC Breaks", function(L)
 	end
 
 	function playermod:Update(win, set)
-		win.title = format(L["%s's control spells"], win.actorname or L.Unknown)
+		win.title = format(L["%s's control spells"], win.actorname or L["Unknown"])
 
 		local player = set and set:GetPlayer(win.actorid, win.actorname)
 		local total = player and player.ccbreak or 0
@@ -830,7 +822,7 @@ Skada:AddLoadableModule("CC Breaks", function(L)
 	end
 
 	function targetmod:Update(win, set)
-		win.title = format(L["%s's control targets"], win.actorname or L.Unknown)
+		win.title = format(L["%s's control targets"], win.actorname or L["Unknown"])
 
 		local player = set and set:GetPlayer(win.actorid, win.actorname)
 		local total = player and player.ccbreak or 0
@@ -875,8 +867,9 @@ Skada:AddLoadableModule("CC Breaks", function(L)
 			end
 
 			local nr = 0
-			for _, player in ipairs(set.players) do
-				if (not win.class or win.class == player.class) and (player.ccbreak or 0) > 0 then
+			for i = 1, #set.players do
+				local player = set.players[i]
+				if player and player.ccbreak and (not win.class or win.class == player.class) then
 					nr = nr + 1
 					local d = win:nr(nr)
 
@@ -909,10 +902,13 @@ Skada:AddLoadableModule("CC Breaks", function(L)
 			click2 = targetmod,
 			click4 = Skada.FilterClass,
 			click4_label = L["Toggle Class Filter"],
-			nototalclick = {playermod, targetmod},
 			columns = {Count = true, Percent = false, sPercent = false},
 			icon = [[Interface\Icons\spell_holy_sealofvalor]]
 		}
+
+		-- no total click.
+		playermod.nototal = true
+		targetmod.nototal = true
 
 		Skada:RegisterForCL(
 			AuraBroken,
@@ -955,8 +951,6 @@ Skada:AddLoadableModule("CC Breaks", function(L)
 								tbl[name].class = actor.class
 								tbl[name].role = actor.role
 								tbl[name].spec = actor.spec
-							else
-								tbl[name].class = "UNKNOWN"
 							end
 						end
 					end

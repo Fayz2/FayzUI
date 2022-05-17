@@ -10,7 +10,7 @@ Skada:AddLoadableModule("Fails", function(L)
 	local spellmod = mod:NewModule(L["Event's failed players"])
 	local ignoredSpells = Skada.dummyTable -- Edit Skada\Core\Tables.lua
 
-	local pairs, ipairs, tostring, format, tContains = pairs, ipairs, tostring, string.format, tContains
+	local pairs, tostring, format, tContains = pairs, tostring, string.format, tContains
 	local GetSpellInfo, UnitGUID, IsInGroup = Skada.GetSpellInfo or GetSpellInfo, UnitGUID, Skada.IsInGroup
 	local _
 
@@ -21,7 +21,7 @@ Skada:AddLoadableModule("Fails", function(L)
 			set.fail = (set.fail or 0) + 1
 
 			-- saving this to total set may become a memory hog deluxe.
-			if set ~= Skada.total then
+			if set ~= Skada.total or Skada.db.profile.totalidc then
 				player.failspells = player.failspells or {}
 				player.failspells[spellid] = (player.failspells[spellid] or 0) + 1
 			end
@@ -35,7 +35,6 @@ Skada:AddLoadableModule("Fails", function(L)
 				local unitGUID = UnitGUID(who)
 				if unitGUID then
 					Skada:DispatchSets(log_fail, unitGUID, who, spellid, event)
-					log_fail(Skada.total, unitGUID, who, spellid, event)
 				end
 			end
 		end
@@ -47,7 +46,7 @@ Skada:AddLoadableModule("Fails", function(L)
 	end
 
 	function spellmod:Update(win, set)
-		win.title = format(L["%s's fails"], win.spellname or L.Unknown)
+		win.title = format(L["%s's fails"], win.spellname or L["Unknown"])
 		if not win.spellid then return end
 
 		local total = set and set:GetFailCount(win.spellid) or 0
@@ -57,8 +56,9 @@ Skada:AddLoadableModule("Fails", function(L)
 			end
 
 			local nr = 0
-			for _, player in ipairs(set.players) do
-				if player.failspells and player.failspells[win.spellid] then
+			for i = 1, #set.players do
+				local player = set.players[i]
+				if player and player.failspells and player.failspells[win.spellid] then
 					nr = nr + 1
 					local d = win:nr(nr)
 
@@ -89,7 +89,7 @@ Skada:AddLoadableModule("Fails", function(L)
 	end
 
 	function playermod:Update(win, set)
-		win.title = format(L["%s's fails"], win.actorname or L.Unknown)
+		win.title = format(L["%s's fails"], win.actorname or L["Unknown"])
 
 		local player = set and set:GetPlayer(win.actorid, win.actorname)
 		local total = player and player.fail or 0
@@ -131,8 +131,9 @@ Skada:AddLoadableModule("Fails", function(L)
 			end
 
 			local nr = 0
-			for _, player in ipairs(set.players) do
-				if (not win.class or win.class == player.class) and (player.fail or 0) > 0 then
+			for i = 1, #set.players do
+				local player = set.players[i]
+				if player and player.fail and (not win.class or win.class == player.class) then
 					nr = nr + 1
 					local d = win:nr(nr)
 
@@ -165,10 +166,12 @@ Skada:AddLoadableModule("Fails", function(L)
 			click1 = playermod,
 			click4 = Skada.FilterClass,
 			click4_label = L["Toggle Class Filter"],
-			nototalclick = {playermod},
 			columns = {Count = true, Percent = false, sPercent = false},
 			icon = [[Interface\Icons\ability_creature_cursed_01]]
 		}
+
+		-- no total click.
+		playermod.nototal = true
 
 		Skada:AddMode(self)
 
@@ -242,8 +245,9 @@ Skada:AddLoadableModule("Fails", function(L)
 		end
 
 		function mod:OnInitialize()
-			for _, event in ipairs(LibFail:GetSupportedEvents()) do
-				LibFail:RegisterCallback(event, onFail)
+			local events = LibFail:GetSupportedEvents()
+			for i = 1, #events do
+				LibFail:RegisterCallback(events[i], onFail)
 			end
 
 			if Skada.db.profile.modules.failschannel == nil then
@@ -271,8 +275,9 @@ Skada:AddLoadableModule("Fails", function(L)
 		function setPrototype:GetFailCount(spellid)
 			if spellid and self.fail then
 				local count = 0
-				for _, p in ipairs(self.players) do
-					if p.failspells and p.failspells[spellid] then
+				for i = 1, #self.players do
+					local p = self.players[i]
+					if p and p.failspells and p.failspells[spellid] then
 						count = count + p.failspells[spellid]
 					end
 				end

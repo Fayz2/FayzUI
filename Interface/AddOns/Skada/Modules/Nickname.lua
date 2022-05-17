@@ -324,8 +324,9 @@ Skada:AddLoadableModule("Nickname", function(L)
 				return false, L["Only letters and two spaces are allowed."]
 			end
 
-			for _, word in ipairs(blacklist) do
-				if strfind(name, word) then
+			for i = 1, #blacklist do
+				local word = blacklist[i]
+				if strfind(name:lower(), word) then
 					return false, L["Your nickname contains a forbidden word."]
 				end
 			end
@@ -359,14 +360,15 @@ Skada:AddLoadableModule("Nickname", function(L)
 			self.sendCooldown = time() + 29
 		end
 
-		Skada:SendComm(nil, nil, "Nickname", Skada.userGUID, Skada.db.profile.nickname)
+		Skada:SendComm(nil, nil, "Nickname", Skada.userGUID, Skada.db.global.nickname)
 	end
 
 	function mod:OnCommNickname(event, sender, guid, nickname)
 		self:SetCacheTable()
 		if Skada.db.profile.ignorenicknames then return end
 		if sender and guid and guid ~= Skada.userGUID and nickname then
-			local okey, nickname = CheckNickname(nickname)
+			local okey = nil
+			okey, nickname = CheckNickname(nickname)
 			if not okey or nickname == "" then
 				self.db.cache[guid] = nil -- remove if invalid or empty
 			elseif not self.db.cache[guid] or self.db.cache[guid] ~= nickname then
@@ -378,6 +380,14 @@ Skada:AddLoadableModule("Nickname", function(L)
 	function mod:OnInitialize()
 		if Skada.db.profile.namedisplay == nil then
 			Skada.db.profile.namedisplay = 2
+		end
+
+		-- move nickname to global
+		if Skada.db.profile.nickname then
+			if not Skada.db.global.nickname then
+				Skada.db.global.nickname = Skada.db.profile.nickname
+				Skada.db.profile.nickname = nil
+			end
 		end
 
 		Skada.options.args.tweaks.args.advanced.args.nickname = {
@@ -406,12 +416,12 @@ Skada:AddLoadableModule("Nickname", function(L)
 					desc = L["Set a nickname for you."],
 					order = 10,
 					get = function()
-						return Skada.db.profile.nickname
+						return Skada.db.global.nickname
 					end,
 					set = function(_, val)
 						local okey, nickname = CheckNickname(val)
 						if okey == true then
-							Skada.db.profile.nickname = nickname
+							Skada.db.global.nickname = nickname
 							mod:SendNickname(true)
 							Skada:ApplySettings()
 						else
@@ -483,13 +493,13 @@ Skada:AddLoadableModule("Nickname", function(L)
 		local nicknameFormats = {[1] = "%1$s", [2] = "%2$s", [3] = "%1$s (%2$s)", [4] = "%2$s (%1$s)"}
 
 		function Skada:FormatName(name, guid)
-			if not self.db.profile.ignorenicknames and (self.db.profile.namedisplay or 0) > 1 and name and guid then
+			if (self.db.profile.namedisplay or 0) > 1 and name and guid then
 				if not mod.db then mod:SetCacheTable() end
 
-				local nickname
-				if guid == self.userGUID then
-					nickname = self.db.profile.nickname
-				elseif mod.db and mod.db.cache[guid] then
+				local nickname = nil
+				if guid == self.userGUID then -- mine
+					nickname = self.db.global.nickname
+				elseif not self.db.profile.ignorenicknames and mod.db and mod.db.cache[guid] then
 					nickname = mod.db.cache[guid]
 				end
 

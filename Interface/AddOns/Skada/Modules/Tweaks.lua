@@ -5,7 +5,7 @@ Skada:AddLoadableModule("Tweaks", function(L)
 	local mod = Skada:NewModule(L["Tweaks"], "AceHook-3.0")
 	local ignoredSpells = Skada.dummyTable -- Edit Skada\Core\Tables.lua
 
-	local ipairs, band, format = ipairs, bit.band, string.format
+	local band, format = bit.band, string.format
 	local UnitClass, GetTime = UnitClass, GetTime
 	local GetSpellInfo = Skada.GetSpellInfo or GetSpellInfo
 	local GetSpellLink = Skada.GetSpellLink or GetSpellLink
@@ -43,7 +43,7 @@ Skada:AddLoadableModule("Tweaks", function(L)
 
 		local WhoPulled
 		do
-			local tinsert, tconcat = table.insert, table.concat
+			local tconcat = table.concat
 			local UnitExists, UnitName = UnitExists, UnitName
 			local new, del = Skada.newTable, Skada.delTable
 
@@ -66,10 +66,10 @@ Skada:AddLoadableModule("Tweaks", function(L)
 
 						local _, class = UnitClass(bosstarget)
 						if class and Skada.classcolors[class] then
-							target = format("|c%s%s|r", Skada.classcolors[class].colorStr, target)
+							target = Skada.classcolors(class, target)
 						end
 
-						tinsert(targettable, format("%s > %s", UnitName(boss) or L.Unknown, target))
+						targettable[#targettable + 1] = format("%s > %s", UnitName(boss) or L["Unknown"], target)
 					end
 				end
 
@@ -90,9 +90,12 @@ Skada:AddLoadableModule("Tweaks", function(L)
 					self:SendMessage("COMBAT_BOSS_DEFEATED", self.current)
 
 					if self.tempsets then -- phases
-						for _, set in ipairs(self.tempsets) do
-							set.success = true
-							self:SendMessage("COMBAT_BOSS_DEFEATED", set)
+						for i = 1, #self.tempsets do
+							local set = self.tempsets[i]
+							if set and not set.success then
+								set.success = true
+								self:SendMessage("COMBAT_BOSS_DEFEATED", set)
+							end
 						end
 					end
 				end
@@ -112,11 +115,11 @@ Skada:AddLoadableModule("Tweaks", function(L)
 
 				if band(dstFlags, BITMASK_GROUP) ~= 0 and self:IsBoss(srcGUID, srcName) then -- boss started?
 					if self:IsPet(dstGUID, dstFlags) then
-						output = format(hitformats[1], srcName, dstName or L.Unknown)
+						output = format(hitformats[1], srcName, dstName or L["Unknown"])
 					elseif dstName then
 						local _, class = UnitClass(dstName)
 						if class and self.classcolors[class] then
-							output = format(hitformats[2], srcName, self.classcolors[class].colorStr, dstName)
+							output = format(hitformats[2], srcName, self.classcolors(class, true), dstName)
 						else
 							output = format(hitformats[1], srcName, dstName)
 						end
@@ -128,14 +131,14 @@ Skada:AddLoadableModule("Tweaks", function(L)
 					if owner then
 						local _, class = UnitClass(owner.name)
 						if class and self.classcolors[class] then
-							output = format(hitformats[4], self.classcolors[class].colorStr, owner.name, PET)
+							output = format(hitformats[4], self.classcolors(class, true), owner.name, PET)
 						else
 							output = format(hitformats[1], owner.name, PET)
 						end
 					elseif srcName then
 						local _, class = UnitClass(srcName)
 						if class and self.classcolors[class] then
-							output = format(hitformats[3], self.classcolors[class].colorStr, srcName)
+							output = format(hitformats[3], self.classcolors(class, true), srcName)
 						else
 							output = srcName
 						end
@@ -241,40 +244,46 @@ Skada:AddLoadableModule("Tweaks", function(L)
 		local meters = {}
 
 		function mod:FilterLine(event, source, msg, ...)
-			for i, line in ipairs(firstlines) do
-				local newID = 0
-				if msg:match(line) then
+			for i = 1, #firstlines do
+				local line = firstlines[i]
+				if line and msg:match(line) then
+					local newID = 0
 					local curtime = GetTime()
 					if find(msg, "|cff(.+)|r") then
 						msg = gsub(msg, "|cff%w%w%w%w%w%w", "")
 						msg = gsub(msg, "|r", "")
 					end
-					for id, meter in ipairs(meters) do
-						local elapsed = curtime - meter.time
-						if meter.src == source and meter.evt == event and elapsed < 1 then
-							newID = id
+					for j = 1, #meters do
+						local meter = meters[j]
+						local elapsed = meter and (curtime - meter.time) or 0
+						if meter and meter.src == source and meter.evt == event and elapsed < 1 then
+							newID = j
 							return true, true, format("|HSKSP:%1$d|h|cffffff00[%2$s]|r|h", newID or 0, msg or "nil")
 						end
 					end
 					meters[#meters + 1] = {src = source, evt = event, time = curtime, data = {}, title = msg}
-					for id, meter in ipairs(meters) do
-						if meter.src == source and meter.evt == event and meter.time == curtime then
-							newID = id
+					for j = 1, #meters do
+						local meter = meters[j]
+						if meter and meter.src == source and meter.evt == event and meter.time == curtime then
+							newID = j
 						end
 					end
 					return true, true, format("|HSKSP:%1$d|h|cffffff00[%2$s]|r|h", newID or 0, msg or "nil")
 				end
 			end
 
-			for _, line in ipairs(nextlines) do
-				if msg:match(line) then
+			for i = 1, #nextlines do
+				local line = nextlines[i]
+				if line and msg:match(line) then
 					local curtime = GetTime()
-					for _, meter in ipairs(meters) do
-						local elapsed = curtime - meter.time
-						if meter.src == source and meter.evt == event and elapsed < 1 then
+					for j = 1, #meters do
+						local meter = meters[j]
+						local elapsed = meter and (curtime - meter.time) or 0
+						if meter and meter.src == source and meter.evt == event and elapsed < 1 then
 							local toInsert = true
-							for _, b in ipairs(meter.data) do
-								if b == msg then
+							for k = 1, #meter.data do
+								local b = meter.data[k]
+								if b and b == msg then
 									toInsert = false
 								end
 							end
@@ -313,8 +322,11 @@ Skada:AddLoadableModule("Tweaks", function(L)
 				ItemRefTooltip:AddLine(meters[meterid].title)
 				ItemRefTooltip:AddLine(format(L["Reported by: %s"], meters[meterid].src))
 				ItemRefTooltip:AddLine(" ")
-				for _, line in ipairs(meters[meterid].data) do
-					ItemRefTooltip:AddLine(line, 1, 1, 1)
+				for i = 1, #meters[meterid].data do
+					local line = meters[meterid].data[i]
+					if line then
+						ItemRefTooltip:AddLine(line, 1, 1, 1)
+					end
 				end
 				ItemRefTooltip:Show()
 			else
@@ -349,11 +361,11 @@ Skada:AddLoadableModule("Tweaks", function(L)
 
 			if Skada.db.profile.combatlogfixverbose then
 				if not self.throttle or self.throttle < GetTime() then
-					Skada:Print(format(
+					Skada:Printf(
 						L["%d filtered / %d events found. Cleared combat log, as it broke."],
 						CombatLogGetNumEntries(),
 						CombatLogGetNumEntries(true)
-					))
+					)
 					self.throttle = GetTime() + 60
 				end
 			elseif self.throttle then
@@ -464,7 +476,7 @@ Skada:AddLoadableModule("Tweaks", function(L)
 			Skada.options.args.tweaks.args.general.args.firsthit = {
 				type = "toggle",
 				name = L["First hit"],
-				desc = L.opt_tweaks_firsthit_desc,
+				desc = L["opt_tweaks_firsthit_desc"],
 				set = SetValue,
 				order = 10
 			}
@@ -478,7 +490,7 @@ Skada:AddLoadableModule("Tweaks", function(L)
 			Skada.options.args.tweaks.args.general.args.spamage = {
 				type = "toggle",
 				name = L["Filter DPS meters Spam"],
-				desc = L.opt_tweaks_spamage_desc,
+				desc = L["opt_tweaks_spamage_desc"],
 				set = SetValue,
 				order = 30
 			}
@@ -500,7 +512,7 @@ Skada:AddLoadableModule("Tweaks", function(L)
 				args = {
 					smartdesc = {
 						type = "description",
-						name = L.opt_tweaks_smarthalt_desc,
+						name = L["opt_tweaks_smarthalt_desc"],
 						fontSize = "medium",
 						order = 10,
 						width = "full"
@@ -513,7 +525,7 @@ Skada:AddLoadableModule("Tweaks", function(L)
 					smartwait = {
 						type = "range",
 						name = L["Duration"],
-						desc = L.opt_tweaks_smartwait_desc,
+						desc = L["opt_tweaks_smartwait_desc"],
 						disabled = function()
 							return not Skada.db.profile.smartstop
 						end,
@@ -535,7 +547,7 @@ Skada:AddLoadableModule("Tweaks", function(L)
 				args = {
 					desc = {
 						type = "description",
-						name = L.opt_tweaks_combatlogfix_desc,
+						name = L["opt_tweaks_combatlogfix_desc"],
 						fontSize = "medium",
 						order = 10,
 						width = "full"
@@ -548,7 +560,7 @@ Skada:AddLoadableModule("Tweaks", function(L)
 					combatlogfixalt = {
 						type = "toggle",
 						name = L["Aggressive Mode"],
-						desc = L.opt_tweaks_combatlogfixalt_desc,
+						desc = L["opt_tweaks_combatlogfixalt_desc"],
 						disabled = function()
 							return not Skada.db.profile.combatlogfix
 						end,
@@ -616,13 +628,13 @@ Skada:AddLoadableModule("Tweaks", function(L)
 			if not self:IsHooked("SetItemRef") then
 				self:RawHook("SetItemRef", "ParseLink", true)
 			end
-			for _, e in ipairs(channel_events) do
-				ChatFrame_AddMessageEventFilter(e, self.ParseChatEvent)
+			for i = 1, #channel_events do
+				ChatFrame_AddMessageEventFilter(channel_events[i], self.ParseChatEvent)
 			end
 		elseif self:IsHooked("SetItemRef") then
 			self:Unhook("SetItemRef")
-			for _, e in ipairs(channel_events) do
-				ChatFrame_RemoveMessageEventFilter(e, self.ParseChatEvent)
+			for i = 1, #channel_events do
+				ChatFrame_RemoveMessageEventFilter(channel_events[i], self.ParseChatEvent)
 			end
 		end
 

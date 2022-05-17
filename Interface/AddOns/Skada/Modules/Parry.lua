@@ -6,7 +6,7 @@ Skada:AddLoadableModule("Parry-Haste", function(L)
 	local mod = Skada:NewModule(L["Parry-Haste"])
 	local targetmod = mod:NewModule(L["Parry target list"])
 
-	local pairs, ipairs, tostring, format = pairs, ipairs, tostring, string.format
+	local pairs, tostring, format = pairs, tostring, string.format
 
 	local parrybosses = {
 		[L["Acidmaw"]] = true,
@@ -31,12 +31,12 @@ Skada:AddLoadableModule("Parry-Haste", function(L)
 			set.parry = (set.parry or 0) + 1
 
 			-- saving this to total set may become a memory hog deluxe.
-			if set ~= Skada.total then
+			if (set ~= Skada.total or Skada.db.profile.totalidc) and data.dstName then
 				player.parrytargets = player.parrytargets or {}
 				player.parrytargets[data.dstName] = (player.parrytargets[data.dstName] or 0) + 1
 
-				if Skada.db.profile.modules.parryannounce then
-					Skada:SendChat(format(L["%s parried %s (%s)"], data.dstName, data.playername, player.parrytargets[data.dstName] or 1), Skada.db.profile.modules.parrychannel, "preset", true)
+				if Skada.db.profile.modules.parryannounce and set ~= Skada.total then
+					Skada:SendChat(format(L["%s parried %s (%s)"], data.dstName, data.playername, player.parrytargets[data.dstName] or 1), Skada.db.profile.modules.parrychannel, "preset")
 				end
 			end
 		end
@@ -54,7 +54,6 @@ Skada:AddLoadableModule("Parry-Haste", function(L)
 			data.dstName = dstName
 
 			Skada:DispatchSets(log_parry, data)
-			log_parry(Skada.total, data)
 		end
 	end
 
@@ -68,7 +67,7 @@ Skada:AddLoadableModule("Parry-Haste", function(L)
 	end
 
 	function targetmod:Update(win, set)
-		win.title = format(L["%s's parry targets"], win.actorname or L.Unknown)
+		win.title = format(L["%s's parry targets"], win.actorname or L["Unknown"])
 		if not set or not win.actorname then return end
 
 		local actor, enemy = set:GetActor(win.actorname, win.actorid)
@@ -112,8 +111,9 @@ Skada:AddLoadableModule("Parry-Haste", function(L)
 			end
 
 			local nr = 0
-			for _, player in ipairs(set.players) do
-				if (not win.class or win.class == player.class) and (player.parry or 0) > 0 then
+			for i = 1, #set.players do
+				local player = set.players[i]
+				if player and player.parry and (not win.class or win.class == player.class) then
 					nr = nr + 1
 					local d = win:nr(nr)
 
@@ -145,10 +145,12 @@ Skada:AddLoadableModule("Parry-Haste", function(L)
 			click1 = targetmod,
 			click4 = Skada.FilterClass,
 			click4_label = L["Toggle Class Filter"],
-			nototalclick = {targetmod},
 			columns = {Count = true, Percent = false},
 			icon = [[Interface\Icons\ability_parry]]
 		}
+
+		-- no total click.
+		targetmod.nototal = true
 
 		Skada:RegisterForCL(SpellMissed, "SPELL_MISSED", {src_is_interesting = true, dst_is_not_interesting = true})
 		Skada:RegisterForCL(SwingMissed, "SWING_MISSED", {src_is_interesting = true, dst_is_not_interesting = true})

@@ -16,11 +16,12 @@ local ttactive = false
 
 local WrapTextInColorCode = Skada.WrapTextInColorCode
 local RGBPercToHex = Skada.RGBPercToHex
+local classcolors = nil
 
 local FONT_FLAGS = Skada.fontFlags
 if not FONT_FLAGS then
 	FONT_FLAGS = {
-		[""] = L.None,
+		[""] = L["None"],
 		["OUTLINE"] = L["Outline"],
 		["THICKOUTLINE"] = L["Thick outline"],
 		["MONOCHROME"] = L["Monochrome"],
@@ -80,14 +81,21 @@ end
 local function inserthistory(win)
 	if win.selectedmode and win.history[#win.history] ~= win.selectedmode then
 		win.history[#win.history + 1] = win.selectedmode
-		if win.child and win.db.childmode ~= 1 then
+		if win.child and (win.db.childmode == 1 or win.db.childmode == 3) then
 			inserthistory(win.child)
 		end
 	end
 end
 
+local function onEnter(win, id, label, mode)
+	mode:Enter(win, id, label)
+	if win.child and (win.db.childmode == 1 or win.db.childmode == 3) then
+		onEnter(win.child, id, label, mode)
+	end
+end
+
 local function showmode(win, id, label, mode)
-	if win.selectedset == "total" and win.metadata.nototalclick and tContains(win.metadata.nototalclick, mode) then
+	if Skada:NoTotalClick(win.selectedset, mode) then
 		return
 	end
 
@@ -97,15 +105,12 @@ local function showmode(win, id, label, mode)
 		mode(mode, win, id, label)
 	else
 		if mode.Enter then
-			mode:Enter(win, id, label)
-			if win.child then
-				mode:Enter(win.child, id, label)
-			end
+			onEnter(win, id, label, mode)
 		end
 		win:DisplayMode(mode)
 	end
 
-	CloseDropDownMenus() -- always close
+	CloseDropDownMenus()
 end
 
 local function BarClick(win, bar, button)
@@ -130,7 +135,47 @@ local function BarClick(win, bar, button)
 	end
 end
 
+local function frameOnMouseDown(self, button)
+	if button == "RightButton" then
+		self.win:RightClick(nil, button)
+	end
+end
+
+local function frameOnDragStart(self)
+	if not self.win.db.barslocked then
+		GameTooltip:Hide()
+		self.isDragging = true
+		self:StartMoving()
+	end
+end
+
+local function frameOnDragStop(self)
+	self:StopMovingOrSizing()
+	self.isDragging = false
+	LibWindow.SavePosition(self)
+end
+
+local function titleOnMouseDown(self, button)
+	if button == "RightButton" then
+		Skada:SegmentMenu(self.win)
+	elseif button == "LeftButton" then
+		Skada:ModeMenu(self.win)
+	end
+end
+
+local function menuOnClick(self, button)
+	if button == "RightButton" then
+		Skada:OpenOptions(self.win)
+	else
+		Skada:OpenMenu(self.win)
+	end
+end
+
 function mod:Create(window, isnew)
+	if not classcolors then
+		classcolors = Skada.classcolors
+	end
+
 	if not window.frame then
 		window.frame = CreateFrame("Frame", window.db.name .. "InlineFrame", UIParent)
 		window.frame.win = window
@@ -151,12 +196,7 @@ function mod:Create(window, isnew)
 	end
 
 	window.frame:EnableMouse()
-	window.frame:SetScript("OnMouseDown", function(frame, button)
-		if button == "RightButton" then
-			window:RightClick(nil, button)
-		end
-	end)
-
+	window.frame:SetScript("OnMouseDown", frameOnMouseDown)
 	LibWindow.RegisterConfig(window.frame, window.db)
 
 	if isnew then
@@ -168,20 +208,12 @@ function mod:Create(window, isnew)
 	window.frame:EnableMouse(true)
 	window.frame:SetMovable(true)
 	window.frame:RegisterForDrag("LeftButton")
-	window.frame:SetScript("OnDragStart", function(frame)
-		if not window.db.barslocked then
-			GameTooltip:Hide()
-			frame.isDragging = true
-			frame:StartMoving()
-		end
-	end)
-	window.frame:SetScript("OnDragStop", function(frame)
-		frame:StopMovingOrSizing()
-		frame.isDragging = false
-		LibWindow.SavePosition(frame)
-	end)
+	window.frame:SetScript("OnDragStart", frameOnDragStart)
+	window.frame:SetScript("OnDragStop", frameOnDragStop)
 
 	local titlebg = CreateFrame("Frame", "InlineTitleBackground", window.frame)
+	titlebg.win = window
+
 	local title = window.frame:CreateFontString("frameTitle", 6)
 	title:SetTextColor(self:GetFontColor(window.db))
 	title:SetFont(self:GetFont(window.db))
@@ -196,13 +228,7 @@ function mod:Create(window, isnew)
 
 	titlebg:SetAllPoints(title)
 	titlebg:EnableMouse(true)
-	titlebg:SetScript("OnMouseDown", function(frame, button)
-		if button == "RightButton" then
-			Skada:SegmentMenu(window)
-		elseif button == "LeftButton" then
-			Skada:ModeMenu(window)
-		end
-	end)
+	titlebg:SetScript("OnMouseDown", titleOnMouseDown)
 
 	local menu = CreateFrame("Button", "$parentMenuButton", window.frame)
 	menu:ClearAllPoints()
@@ -220,7 +246,8 @@ function mod:Create(window, isnew)
 	menu:SetPoint("LEFT", window.frame, "LEFT", 6, 0)
 	menu:SetFrameLevel(window.frame:GetFrameLevel() + 5)
 	menu:SetBackdrop(buttonBackdrop)
-	menu:SetScript("OnClick", function() Skada:OpenMenu(window) end)
+	menu.win = window
+	menu:SetScript("OnClick", menuOnClick)
 
 	window.frame.menu = menu
 	window.frame.skadamenubutton = title
@@ -332,15 +359,15 @@ function mod:GetBar(win)
 end
 
 function mod:UpdateBar(bar, bardata, db)
-	local label = bardata.text or bardata.label or L.Unknown
+	local label = bardata.text or bardata.label or L["Unknown"]
 	if db.isusingclasscolors and bardata.class then
-		label = WrapTextInColorCode(bardata.text or bardata.label or L.Unknown, Skada.classcolors[bardata.class].colorStr)
+		label = classcolors(bardata.class, bardata.text or bardata.label or L["Unknown"])
 	elseif bardata.color and bardata.color.colorStr then
-		label = WrapTextInColorCode(bardata.text or bardata.label or L.Unknown, bardata.color.colorStr)
+		label = format("|c%s%s|r", bardata.color.colorStr, bardata.text or bardata.label or L["Unknown"])
 	elseif bardata.color then
-		label = WrapTextInColorCode(bardata.text or bardata.label or L.Unknown, RGBPercToHex(bardata.color.r or 1, bardata.color.g or 1, bardata.color.b or 1, bardata.color.a or 1, true))
+		label = WrapTextInColorCode(bardata.text or bardata.label or L["Unknown"], RGBPercToHex(bardata.color.r or 1, bardata.color.g or 1, bardata.color.b or 1, true))
 	else
-		label = bardata.text or bardata.label or L.Unknown
+		label = bardata.text or bardata.label or L["Unknown"]
 	end
 
 	if bardata.valuetext then
@@ -365,8 +392,26 @@ function mod:UpdateBar(bar, bardata, db)
 	end
 
 	bar.valueid = bardata.id
-	bar.valuetext = bardata.text or bardata.label or L.Unknown
+	bar.valuetext = bardata.text or bardata.label or L["Unknown"]
 	return bar
+end
+
+local function sortFunc(a, b)
+	if not a or a.value == nil then
+		return false
+	elseif not b or b.value == nil then
+		return true
+	elseif a.value < b.value then
+		return false
+	elseif a.value > b.value then
+		return true
+	elseif not a.label then
+		return false
+	elseif not b.label then
+		return true
+	else
+		return a.label > b.label
+	end
 end
 
 function mod:Update(win)
@@ -389,19 +434,11 @@ function mod:Update(win)
 
 	for k, bardata in pairs(wd) do
 		if bardata.id then
-			tinsert(mybars, mod:UpdateBar(mod:GetBar(win), bardata, win.db))
+			mybars[#mybars + 1] = mod:UpdateBar(mod:GetBar(win), bardata, win.db)
 		end
 	end
 
-	tsort(mybars, function(bar1, bar2)
-		if not bar1 or bar1.value == nil then
-			return false
-		elseif not bar2 or bar2.value == nil then
-			return true
-		else
-			return bar1.value > bar2.value
-		end
-	end)
+	tsort(mybars, sortFunc)
 
 	local yoffset = (win.db.height - win.db.barfontsize) / 2
 	local left = win.frame.barstartx + 40
@@ -514,8 +551,8 @@ function mod:ApplySettings(win)
 
 		--background
 		local fbackdrop = {}
-		local borderR, borderG, borderB = unpack(ElvUI[1]["media"].bordercolor)
-		local backdropR, backdropG, backdropB = unpack(ElvUI[1]["media"].backdropcolor)
+		local borderR, borderG, borderB = ElvUI[1]["media"].bordercolor[1], ElvUI[1]["media"].bordercolor[2], ElvUI[1]["media"].bordercolor[3]
+		local backdropR, backdropG, backdropB = ElvUI[1]["media"].backdropcolor[1], ElvUI[1]["media"].backdropcolor[2], ElvUI[1]["media"].backdropcolor[3]
 		local backdropA = 0
 		if p.issolidbackdrop then
 			backdropA = 1.0
@@ -543,7 +580,7 @@ function mod:ApplySettings(win)
 		f:SetBackdrop(fbackdrop)
 		f:SetBackdropColor(p.background.color.r, p.background.color.g, p.background.color.b, p.background.color.a)
 		f:SetFrameStrata(p.strata)
-		Skada:ApplyBorder(f, p.background.bordertexture, p.background.bordercolor, p.background.borderthickness)
+		Skada:ApplyBorder(f, p.background.bordertexture, p.background.bordercolor, p.background.borderthickness, p.background.borderinsets)
 	end
 
 	if p.hidden and win.frame:IsShown() then
@@ -614,7 +651,7 @@ function mod:AddDisplayOptions(win, options)
 			barwidth = {
 				type = "range",
 				name = L["Width"],
-				desc = L.opt_barwidth_desc,
+				desc = L["opt_barwidth_desc"],
 				min = 100,
 				max = 300,
 				step = 1.0,
@@ -630,19 +667,19 @@ function mod:AddDisplayOptions(win, options)
 			fixedbarwidth = {
 				type = "toggle",
 				name = L["Fixed bar width"],
-				desc = L.opt_fixedbarwidth_desc,
+				desc = L["opt_fixedbarwidth_desc"],
 				order = 70
 			},
 			isusingclasscolors = {
 				type = "toggle",
 				name = L["Class Colors"],
-				desc = L.opt_isusingclasscolors_desc,
+				desc = L["opt_isusingclasscolors_desc"],
 				order = 80,
 			},
 			isonnewline = {
 				type = "toggle",
 				name = L["Put values on new line."],
-				desc = L.opt_isonnewline_desc,
+				desc = L["opt_isonnewline_desc"],
 				order = 90
 			},
 			clickthrough = {
@@ -670,7 +707,7 @@ function mod:AddDisplayOptions(win, options)
 			isusingelvuiskin = {
 				type = "toggle",
 				name = L["Use ElvUI skin if avaliable."],
-				desc = L.opt_isusingelvuiskin_desc,
+				desc = L["opt_isusingelvuiskin_desc"],
 				descStyle = "inline",
 				order = 10,
 				width = "full"

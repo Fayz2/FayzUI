@@ -5,8 +5,11 @@ local ACD = LibStub("AceConfigDialog-3.0")
 local ACR = LibStub("AceConfigRegistry-3.0")
 
 local fmt = string.format
-local pairs, ipairs = pairs, ipairs
-local GetAddOnMetadata = GetAddOnMetadata
+local next = next
+
+-- references: windows, modes
+local windows = nil
+local modes = nil
 
 Skada.windowdefaults = {
 	name = "Skada",
@@ -20,7 +23,6 @@ Skada.windowdefaults = {
 	numfontsize = 13,
 	barheight = 18,
 	barwidth = 240,
-	barmax = 40,
 	barorientation = 1,
 	barcolor = {r = 0.3, g = 0.3, b = 0.8, a = 1},
 	barbgcolor = {r = 0.3, g = 0.3, b = 0.3, a = 0.6},
@@ -40,9 +42,6 @@ Skada.windowdefaults = {
 		color = {r = 0.3, g = 0.3, b = 0.3, a = 1},
 		texture = "Armory",
 		textcolor = {r = 0.9, g = 0.9, b = 0.9, a = 1},
-		bordertexture = "None",
-		borderthickness = 2,
-		bordercolor = {r = 0, g = 0, b = 0, a = 1},
 		toolbar = 1,
 		spacing = 1
 	},
@@ -53,6 +52,7 @@ Skada.windowdefaults = {
 		bordercolor = {r = 0, g = 0, b = 0, a = 0.5},
 		bordertexture = "None",
 		borderthickness = 1,
+		borderinsets = 0,
 		height = 200
 	},
 	strata = "LOW",
@@ -64,9 +64,7 @@ Skada.windowdefaults = {
 	set = "current",
 	display = "bar",
 	child = "",
-	childmode = 0,
 	sticky = true,
-	sticked = {},
 	clamped = true,
 	tooltippos = "NONE",
 	hideauto = 1,
@@ -106,10 +104,10 @@ Skada.defaults = {
 		timemesure = 2,
 		hidedisables = true,
 		mergepets = true,
-		shortmenu = true,
 		feed = "",
 		updatefrequency = 0.5,
 		minsetlength = 5,
+		totalflag = 0x10,
 		modules = {},
 		columns = {},
 		toast = {spawn_point = "BOTTOM", duration = 5, opacity = 0.75},
@@ -124,12 +122,13 @@ Skada.defaults = {
 			["Healing Taken"] = true,
 			["Healthstones"] = true,
 			["HPS"] = true,
+			["Total Healing"] = true,
 			["Improvement"] = true,
 			["My Spells"] = true,
 			["Overhealing"] = true,
 			["Overkill"] = true,
 			["Project Ascension"] = true,
-			["PVP"] = true,
+			["Player vs. Player"] = true,
 			["Themes"] = true,
 			["Useful Damage"] = true
 		},
@@ -139,7 +138,6 @@ Skada.defaults = {
 
 -------------------------------------------------------------------------------
 
-local titleVersion = fmt("|T%s:18:18:0:0:32:32:2:30:2:30|t |cffffd200Skada|r |cffffffff%s|r", Skada.logo, Skada.version)
 local optionsValues = {
 	RESETOPT = {
 		L["No"], -- [1]
@@ -156,7 +154,7 @@ local optionsValues = {
 		FULLSCREEN_DIALOG = "FULLSCREEN_DIALOG"
 	},
 	AUTOHIDE = {
-		L.None, -- [1]
+		L["None"], -- [1]
 		L["While in combat"], -- [2]
 		L["While out of combat"], -- [3]
 		L["While not in a group"], -- [4]
@@ -170,7 +168,7 @@ local optionsValues = {
 		L["Mode"], -- [3]
 	},
 	TOOLTIPPOS = {
-		NONE = L.None,
+		NONE = L["None"],
 		BOTTOM = L["Bottom"],
 		BOTTOMLEFT = L["Bottom Left"],
 		BOTTOMRIGHT = L["Bottom Right"],
@@ -183,20 +181,25 @@ local optionsValues = {
 local newdisplay = "bar"
 local newwindow = nil
 
+local function GetValue(i)
+	return Skada.db.profile[i[#i]]
+end
+
+local function SetValue(i, val)
+	Skada.db.profile[i[#i]] = val
+	Skada:ApplySettings()
+
+	if i[#i] == "showtotals" then
+		Skada:Wipe()
+		Skada:UpdateDisplay(true)
+	end
+end
+
 Skada.options = {
 	type = "group",
 	name = fmt("Skada |cffffffff%s|r", Skada.version),
-	get = function(i)
-		return Skada.db.profile[i[#i]]
-	end,
-	set = function(i, val)
-		Skada.db.profile[i[#i]] = val or nil
-		if i[#i] == "showtotals" then
-			Skada:ReloadSettings()
-		else
-			Skada:ApplySettings()
-		end
-	end,
+	get = GetValue,
+	set = SetValue,
 	args = {
 		windows = {
 			type = "group",
@@ -229,7 +232,7 @@ Skada.options = {
 							order = 20,
 							values = function()
 								local list = {}
-								for name, display in pairs(Skada.displays) do
+								for name, display in next, Skada.displays do
 									list[name] = display.name
 								end
 								return list
@@ -285,55 +288,49 @@ Skada.options = {
 								Skada:RefreshMMButton()
 							end
 						},
-						shortmenu = {
-							type = "toggle",
-							name = L["Shorten menus"],
-							desc = L.opt_shortmenu_desc,
-							order = 20
-						},
 						mergepets = {
 							type = "toggle",
 							name = L["Merge pets"],
 							desc = L["Merges pets with their owners. Changing this only affects new data."],
-							order = 30
+							order = 20
 						},
 						showtotals = {
 							type = "toggle",
 							name = L["Show totals"],
 							desc = L["Shows a extra row with a summary in certain modes."],
-							order = 40
+							order = 30
 						},
 						onlykeepbosses = {
 							type = "toggle",
 							name = L["Only keep boss fighs"],
 							desc = L["Boss fights will be kept with this on, and non-boss fights are discarded."],
-							order = 50
+							order = 40
 						},
 						alwayskeepbosses = {
 							type = "toggle",
 							name = L["Always keep boss fights"],
 							desc = L["Boss fights will be kept with this on and will not be affected by Skada reset."],
-							order = 60
+							order = 50
 						},
 						hidesolo = {
 							type = "toggle",
 							name = L["Hide when solo"],
 							desc = L["Hides Skada's window when not in a party or raid."],
-							order = 70
+							order = 60
 						},
 						hidepvp = {
 							type = "toggle",
 							name = L["Hide in PvP"],
 							desc = L["Hides Skada's window when in Battlegrounds/Arenas."],
-							order = 80
+							order = 70
 						},
 						hidecombat = {
 							type = "toggle",
 							name = L["Hide in combat"],
 							desc = L["Hides Skada's window when in combat."],
-							order = 90,
-							set = function()
-								Skada.db.profile.hidecombat = not Skada.db.profile.hidecombat
+							order = 80,
+							set = function(_, val)
+								Skada.db.profile.hidecombat = val or nil
 								if Skada.db.profile.hidecombat then
 									Skada.db.profile.showcombat = nil
 								end
@@ -344,9 +341,9 @@ Skada.options = {
 							type = "toggle",
 							name = L["Show in combat"],
 							desc = L["Shows Skada's window when in combat."],
-							order = 100,
-							set = function()
-								Skada.db.profile.showcombat = not Skada.db.profile.showcombat
+							order = 90,
+							set = function(_, val)
+								Skada.db.profile.showcombat = val or nil
 								if Skada.db.profile.showcombat then
 									Skada.db.profile.hidecombat = nil
 								end
@@ -357,49 +354,103 @@ Skada.options = {
 							type = "toggle",
 							name = L["Disable while hidden"],
 							desc = L["Skada will not collect any data when automatically hidden."],
-							order = 110
+							order = 100
 						},
 						sortmodesbyusage = {
 							type = "toggle",
 							name = L["Sort modes by usage"],
 							desc = L["The mode list will be sorted to reflect usage instead of alphabetically."],
-							order = 120
+							order = 110
 						},
 						showranks = {
 							type = "toggle",
 							name = L["Show rank numbers"],
 							desc = L["Shows numbers for relative ranks for modes where it is applicable."],
-							order = 130
+							order = 120
 						},
 						showself = {
 							type = "toggle",
 							name = L["Always show self"],
-							desc = L.opt_showself_desc,
-							order = 140
+							desc = L["opt_showself_desc"],
+							order = 130
 						},
 						reportlinks = {
 							type = "toggle",
 							name = L["Links in reports"],
 							desc = L["When possible, use links in the report messages."],
-							order = 150
-						},
-						translit = {
-							type = "toggle",
-							name = L["Transliterate"],
-							desc = L["Converts Cyrillic letters into Latin letters."],
-							order = 160
+							order = 140
 						},
 						autostop = {
 							type = "toggle",
 							name = L["Autostop"],
-							desc = L.opt_autostop_desc,
-							order = 170
+							desc = L["opt_autostop_desc"],
+							order = 150
 						},
 						tentativecombatstart = {
 							type = "toggle",
 							name = L["Aggressive combat detection"],
-							desc = L.opt_tentativecombatstart_desc,
-							order = 180
+							desc = L["opt_tentativecombatstart_desc"],
+							order = 160
+						},
+						sep_850 = {
+							type = "description",
+							name = " ",
+							width = "full",
+							order = 850
+						},
+						tooltips = {
+							type = "group",
+							name = L["Tooltips"],
+							desc = fmt(L["Options for %s."], L["Tooltips"]),
+							inline = true,
+							order = 900,
+							args = {
+								tooltips = {
+									type = "toggle",
+									name = L["Show Tooltips"],
+									desc = L["Shows tooltips with extra information in some modes."],
+									order = 1
+								},
+								informativetooltips = {
+									type = "toggle",
+									name = L["Informative Tooltips"],
+									desc = L["Shows subview summaries in the tooltips."],
+									order = 2,
+									disabled = function()
+										return not Skada.db.profile.tooltips
+									end
+								},
+								tooltiprows = {
+									type = "range",
+									name = L["Subview Rows"],
+									desc = L["The number of rows from each subview to show when using informative tooltips."],
+									order = 3,
+									min = 1,
+									max = 10,
+									step = 1,
+									disabled = function()
+										return not Skada.db.profile.tooltips
+									end
+								},
+								tooltippos = {
+									type = "select",
+									name = L["Tooltip Position"],
+									desc = L["Position of the tooltips."],
+									order = 4,
+									values = {
+										["default"] = L["Default"],
+										["smart"] = L["Smart"],
+										["topright"] = L["Top Right"],
+										["topleft"] = L["Top Left"],
+										["bottomright"] = L["Bottom Right"],
+										["bottomleft"] = L["Bottom Left"],
+										["cursor"] = L["Follow Cursor"]
+									},
+									disabled = function()
+										return not Skada.db.profile.tooltips
+									end
+								}
+							}
 						}
 					}
 				},
@@ -427,14 +478,14 @@ Skada.options = {
 							type = "select",
 							name = L["Brackets"],
 							desc = L["Choose which type of brackets to use."],
-							values = {"(", "{", "[", "<", L.None},
+							values = {"(", "{", "[", "<", L["None"]},
 							order = 30
 						},
 						separator = {
 							type = "select",
 							name = L["Separator"],
 							desc = L["Choose which character is used to separator values between brackets."],
-							values = {",", ".", ";", "-", "|", "/", "\\", "~", L.None},
+							values = {",", ".", ";", "-", "|", "/", "\\", "~", L["None"]},
 							order = 40
 						},
 						decimals = {
@@ -461,6 +512,12 @@ Skada.options = {
 							desc = L["Append a count to set names with duplicate mob names."],
 							order = 70
 						},
+						translit = {
+							type = "toggle",
+							name = L["Transliterate"],
+							desc = L["Converts Cyrillic letters into Latin letters."],
+							order = 80
+						}
 					}
 				},
 				advanced = {
@@ -472,33 +529,29 @@ Skada.options = {
 						timemesure = {
 							type = "select",
 							name = L["Time Measure"],
-							desc = L.opt_timemesure_desc,
+							desc = L["opt_timemesure_desc"],
 							values = {[1] = L["Activity Time"], [2] = L["Effective Time"]},
-							get = function()
-								return Skada.db.profile.timemesure or 1
-							end,
-							width = "double",
 							order = 10
 						},
 						feed = {
 							type = "select",
 							name = L["Data Feed"],
-							desc = L.opt_feed_desc,
-							width = "double",
+							desc = L["opt_feed_desc"],
 							values = function()
-								local feeds = {[""] = L.None}
-								for name, _ in Skada:IterateFeeds() do
-									feeds[name] = name
+								local list = {[""] = L["None"]}
+								local feeds = Skada:GetFeeds()
+								for name in next, feeds do
+									list[name] = name
 								end
-								return feeds
+								return list
 							end,
 							order = 20
 						},
-						separator1 = {
+						sep1 = {
 							type = "description",
 							name = " ",
 							width = "full",
-							order = 900
+							order = 800
 						},
 						setstokeep = {
 							type = "range",
@@ -507,7 +560,7 @@ Skada.options = {
 							min = 0,
 							max = 30,
 							step = 1,
-							order = 910
+							order = 810
 						},
 						setslimit = {
 							type = "range",
@@ -516,14 +569,7 @@ Skada.options = {
 							min = 0,
 							max = 30,
 							step = 1,
-							order = 920
-						},
-						memorycheck = {
-							type = "toggle",
-							name = L["Memory Check"],
-							desc = function() return fmt(L["Checks memory usage and warns you if it is greater than or equal to %dmb."], 10 + (Skada.db.profile.setstokeep + Skada.db.profile.setslimit) * 2) end,
-							width = "double",
-							order = 930
+							order = 820
 						},
 						updatefrequency = {
 							type = "range",
@@ -532,73 +578,25 @@ Skada.options = {
 							min = 0.10,
 							max = 3,
 							step = 0.01,
-							width = "double",
-							order = 980
+							order = 830
 						},
 						minsetlength = {
 							type = "range",
 							name = L["Minimum segment length"],
 							desc = L["The minimum length required in seconds for a segment to be saved."],
-							width = "double",
 							min = 3,
 							max = 30,
 							step = 1,
-							order = 990
+							order = 840
+						},
+						memorycheck = {
+							type = "toggle",
+							name = L["Memory Check"],
+							desc = function() return fmt(L["Checks memory usage and warns you if it is greater than or equal to %dmb."], 10 + (Skada.db.profile.setstokeep + Skada.db.profile.setslimit) * 2) end,
+							width = "double",
+							order = 850
 						}
 					}
-				}
-			}
-		},
-		tooltips = {
-			type = "group",
-			name = L["Tooltips"],
-			desc = fmt(L["Options for %s."], L["Tooltips"]),
-			order = 30,
-			args = {
-				tooltips = {
-					type = "toggle",
-					name = L["Show Tooltips"],
-					desc = L["Shows tooltips with extra information in some modes."],
-					order = 1
-				},
-				informativetooltips = {
-					type = "toggle",
-					name = L["Informative Tooltips"],
-					desc = L["Shows subview summaries in the tooltips."],
-					order = 2,
-					disabled = function()
-						return not Skada.db.profile.tooltips
-					end
-				},
-				tooltiprows = {
-					type = "range",
-					name = L["Subview Rows"],
-					desc = L["The number of rows from each subview to show when using informative tooltips."],
-					order = 3,
-					min = 1,
-					max = 10,
-					step = 1,
-					disabled = function()
-						return not Skada.db.profile.tooltips
-					end
-				},
-				tooltippos = {
-					type = "select",
-					name = L["Tooltip Position"],
-					desc = L["Position of the tooltips."],
-					order = 4,
-					values = {
-						["default"] = L["Default"],
-						["smart"] = L["Smart"],
-						["topright"] = L["Top Right"],
-						["topleft"] = L["Top Left"],
-						["bottomright"] = L["Bottom Right"],
-						["bottomleft"] = L["Bottom Left"],
-						["cursor"] = L["Follow Cursor"]
-					},
-					disabled = function()
-						return not Skada.db.profile.tooltips
-					end
 				}
 			}
 		},
@@ -607,14 +605,14 @@ Skada.options = {
 			name = L["Columns"],
 			desc = fmt(L["Options for %s."], L["Columns"]),
 			childGroups = "select",
-			order = 40,
+			order = 30,
 			args = {}
 		},
 		resetoptions = {
 			type = "group",
 			name = L["Data Resets"],
 			desc = fmt(L["Options for %s."], L["Data Resets"]),
-			order = 50,
+			order = 40,
 			get = function(i)
 				return Skada.db.profile.reset[i[#i]]
 			end,
@@ -655,16 +653,12 @@ Skada.options = {
 				skippopup = {
 					type = "toggle",
 					name = L["Skip reset dialog"],
-					desc = L.opt_skippopup_desc,
+					desc = L["opt_skippopup_desc"],
 					descStyle = "inline",
 					order = 5,
 					width = "double",
-					get = function()
-						return Skada.db.profile.skippopup
-					end,
-					set = function()
-						Skada.db.profile.skippopup = not Skada.db.profile.skippopup
-					end
+					get = GetValue,
+					set = SetValue
 				}
 			}
 		},
@@ -672,7 +666,7 @@ Skada.options = {
 			type = "group",
 			name = L["Modules Options"],
 			desc = fmt(L["Options for %s."], L["Modules"]),
-			order = 60,
+			order = 50,
 			width = "double",
 			get = function(i)
 				return Skada.db.profile.modules[i[#i]]
@@ -685,23 +679,30 @@ Skada.options = {
 				header = {
 					type = "header",
 					name = L["Disabled Modules"],
-					order = 0
-				},
-				desc = {
-					type = "description",
-					name = L["Tick the modules you want to disable."],
-					width = "double",
-					fontSize = "medium",
-					order = 0.1
+					order = 10
 				},
 				apply = {
 					type = "execute",
 					name = APPLY,
-					width = "double",
+					width = "full",
 					func = ReloadUI,
 					confirm = function() return L["This change requires a UI reload. Are you sure?"] end,
 					disabled = true,
-					order = 99
+					order = 20
+				},
+				blocked = {
+					type = "group",
+					name = L["Tick the modules you want to disable."],
+					inline = true,
+					order = 30,
+					get = function(i)
+						return Skada.db.profile.modulesBlocked[i[#i]]
+					end,
+					set = function(i, val)
+						Skada.db.profile.modulesBlocked[i[#i]] = val
+						Skada.options.args.modules.args.apply.disabled = nil
+					end,
+					args = {}
 				}
 			}
 		},
@@ -717,7 +718,14 @@ Skada.options = {
 					name = L["General"],
 					desc = fmt(L["General options for %s."], L["Tweaks"]),
 					order = 10,
-					args = {}
+					args = {
+						absdamage = {
+							type = "toggle",
+							name = L["Absorbed Damage"],
+							desc = L["Enable this if you want the damage absorbed to be included in the damage done."],
+							order = 100
+						}
+					}
 				},
 				advanced = {
 					type = "group",
@@ -725,7 +733,8 @@ Skada.options = {
 					desc = fmt(L["Advanced options for %s."], L["Tweaks"]),
 					order = 900,
 					args = {
-						toast_opt = Skada:GetToastOptions()
+						toast_opt = Skada:GetToastOptions(),
+						total_opt = Skada:GetTotalOptions()
 					}
 				}
 			}
@@ -735,7 +744,7 @@ Skada.options = {
 			name = L["Profiles"],
 			desc = fmt(L["Options for %s."], L["Profiles"]),
 			childGroups = "tab",
-			order = 10000,
+			order = 1000,
 			args = {}
 		}
 	}
@@ -743,12 +752,14 @@ Skada.options = {
 
 -- initial options for blizzard interface options
 do
+	local GetAddOnMetadata = GetAddOnMetadata
 	local initOptions
+
 	local function GetInitOptions()
 		if not initOptions then
 			initOptions = {
 				type = "group",
-				name = titleVersion,
+				name = fmt("|T%s:18:18:0:0:32:32:2:30:2:30|t |cffffd200Skada|r |cffffffff%s|r", Skada.logo, Skada.version),
 				args = {
 					open = {
 						type = "execute",
@@ -761,7 +772,9 @@ do
 			}
 
 			-- about args
-			for i, field in ipairs({"Version", "Date", "Author", "Credits", "Donate", "License", "Website", "Discord", "Localizations", "Thanks"}) do
+			local fields = {"Version", "Date", "Author", "Credits", "Donate", "License", "Website", "Discord", "Localizations", "Thanks"}
+			for i = 1, #fields do
+				local field = fields[i]
 				local meta = GetAddOnMetadata("Skada", field) or GetAddOnMetadata("Skada", "X-" .. field)
 				if meta then
 					if meta:match("^http[s]://[a-zA-Z0-9_/]-%.[a-zA-Z]") or meta:match("^[%w.]+@%w+%.%w+$") then
@@ -790,7 +803,7 @@ end
 function Skada:OpenOptions(win)
 	if not ACR:GetOptionsTable("Skada") then
 		LibStub("AceConfig-3.0"):RegisterOptionsTable("Skada", Skada.options)
-		ACD:SetDefaultSize("Skada", 625, 500)
+		ACD:SetDefaultSize("Skada", 630, 500)
 	end
 
 	if not ACD:Close("Skada") then
@@ -826,7 +839,7 @@ function Skada:AddColumnOptions(mod)
 	local cols = {type = "group", name = moduleName, inline = true, args = {}}
 
 	local order = 0
-	for colname, _ in pairs(mod.metadata.columns) do
+	for colname in next, mod.metadata.columns do
 		local c = mod.moduleName .. "_" .. colname
 
 		-- Set initial value from db if available, otherwise use mod default value.
@@ -849,13 +862,13 @@ function Skada:AddColumnOptions(mod)
 		}
 
 		-- proper and reasonable columns order.
-		if col.name == L.APS or col.name == L.DPS or col.name == L.DTPS or col.name == L.HPS or col.name == L.TPS then
+		if col.name == L["APS"] or col.name == L["DPS"] or col.name == L["DTPS"] or col.name == L["HPS"] or col.name == L["TPS"] then
 			col.order = 6
-		elseif col.name == L.sAPS or col.name == L.sDPS or col.name == L.sDTPS or col.name == L.sHPS then
+		elseif col.name == L["sAPS"] or col.name == L["sDPS"] or col.name == L["sDTPS"] or col.name == L["sHPS"] then
 			col.order = 8
-		elseif col.name == L.Percent then
+		elseif col.name == L["Percent"] then
 			col.order = 7
-		elseif col.name == L.sPercent then
+		elseif col.name == L["sPercent"] then
 			col.order = 9
 		else
 			order = order + 1
@@ -868,27 +881,24 @@ function Skada:AddColumnOptions(mod)
 	Skada.options.args.columns.args[category].args[mod.moduleName] = cols
 end
 
+function Skada:AddLoadableModuleCheckbox(mod, name, description)
+	self.options.args.modules.args.blocked.args[mod] = {
+		type = "toggle",
+		name = _G[name] or L[name],
+		desc = description and L[description]
+	}
+end
+
+local getScreenWidth
 do
-	local function GetValue(i)
-		return Skada.db.profile.modulesBlocked[i[#i]]
-	end
-
-	local function SetValue(i, val)
-		Skada.db.profile.modulesBlocked[i[#i]] = val
-		Skada.options.args.modules.args.apply.disabled = nil
-	end
-
-	function Skada:AddLoadableModuleCheckbox(mod, name, description)
-		self.options.args.modules.args[mod] = {
-			type = "toggle",
-			name = _G[name] or L[name],
-			desc = description and L[description],
-			get = GetValue,
-			set = SetValue
-		}
+	local floor = math.floor
+	local GetScreenWidth = GetScreenWidth
+	function getScreenWidth()
+		return floor(GetScreenWidth())
 	end
 end
 
+local modesList = nil
 function Skada:FrameSettings(db, include_dimensions)
 	local obj = {
 		type = "group",
@@ -900,7 +910,7 @@ function Skada:FrameSettings(db, include_dimensions)
 			return db[i[#i]]
 		end,
 		set = function(i, val)
-			db[i[#i]] = val or nil
+			db[i[#i]] = val
 			Skada:ApplySettings(db.name)
 		end,
 		args = {
@@ -916,8 +926,8 @@ function Skada:FrameSettings(db, include_dimensions)
 						desc = L["Sets the scale of the window."],
 						order = 10,
 						width = "double",
-						min = 0.1,
-						max = 3,
+						min = 0.5,
+						max = 2,
 						step = 0.01,
 						isPercent = true
 					},
@@ -941,37 +951,13 @@ function Skada:FrameSettings(db, include_dimensions)
 								desc = L["The texture used as the background."],
 								order = 10,
 								width = "double",
-								values = Skada:MediaList("background"),
-								get = function()
-									return db.background.texture
-								end,
-								set = function(_, key)
-									db.background.texture = key
-									Skada:ApplySettings(db.name)
-								end
-							},
-							tile = {
-								type = "toggle",
-								name = L["Tile"],
-								desc = L["Tile the background texture."],
-								order = 20
-							},
-							tilesize = {
-								type = "range",
-								name = L["Tile Size"],
-								desc = L["The size of the texture pattern."],
-								order = 30,
-								min = 0,
-								max = floor(GetScreenWidth()),
-								step = 0.1,
-								bigStep = 1
+								values = Skada:MediaList("background")
 							},
 							color = {
 								type = "color",
 								name = L["Background Color"],
 								desc = L["The color of the background."],
-								order = 40,
-								width = "double",
+								order = 20,
 								hasAlpha = true,
 								get = function()
 									local c = db.background.color or Skada.windowdefaults.background.color
@@ -985,6 +971,23 @@ function Skada:FrameSettings(db, include_dimensions)
 									db.background.color.a = a
 									Skada:ApplySettings(db.name)
 								end
+							},
+							tile = {
+								type = "toggle",
+								name = L["Tile"],
+								desc = L["Tile the background texture."],
+								order = 30
+							},
+							tilesize = {
+								type = "range",
+								name = L["Tile Size"],
+								desc = L["The size of the texture pattern."],
+								order = 40,
+								width = "double",
+								min = 0,
+								max = getScreenWidth(),
+								step = 0.1,
+								bigStep = 1
 							}
 						}
 					},
@@ -993,6 +996,13 @@ function Skada:FrameSettings(db, include_dimensions)
 						name = L["Border"],
 						inline = true,
 						order = 30,
+						get = function(i)
+							return db.background[i[#i]]
+						end,
+						set = function(i, val)
+							db.background[i[#i]] = val
+							Skada:ApplySettings(db.name)
+						end,
 						args = {
 							bordertexture = {
 								type = "select",
@@ -1000,15 +1010,12 @@ function Skada:FrameSettings(db, include_dimensions)
 								name = L["Border texture"],
 								desc = L["The texture used for the borders."],
 								order = 10,
-								width = "double",
 								values = Skada:MediaList("border"),
-								get = function()
-									return db.background.bordertexture
-								end,
 								set = function(_, key)
 									db.background.bordertexture = key
 									if key == "None" then
 										db.background.borderthickness = 0
+										db.background.borderinsets = 0
 									end
 									Skada:ApplySettings(db.name)
 								end
@@ -1040,14 +1047,17 @@ function Skada:FrameSettings(db, include_dimensions)
 								min = 0,
 								max = 50,
 								step = 0.01,
-								bigStep = 0.5,
-								get = function()
-									return db.background.borderthickness
-								end,
-								set = function(_, val)
-									db.background.borderthickness = val
-									Skada:ApplySettings(db.name)
-								end
+								bigStep = 0.5
+							},
+							borderinsets = {
+								type = "range",
+								name = L["Border Insets"],
+								desc = L["The distance between the window and its border."],
+								order = 40,
+								min = -32,
+								max = 32,
+								step = 0.01,
+								bigStep = 1
 							}
 						}
 					}
@@ -1125,27 +1135,37 @@ function Skada:FrameSettings(db, include_dimensions)
 							modeincombat = {
 								type = "select",
 								name = L["Combat Mode"],
-								desc = L.opt_combatmode_desc,
+								desc = L["opt_combatmode_desc"],
 								order = 10,
 								values = function()
-									local m = {[""] = L.None}
-									for _, mode in Skada:IterateModes() do
-										m[mode.moduleName] = mode.moduleName
+									if not modesList then
+										modesList = {[""] = L["None"]}
+										local modes = Skada:GetModes()
+										for i = 1, #modes do
+											if modes[i] then
+												modesList[modes[i].moduleName] = modes[i].moduleName
+											end
+										end
 									end
-									return m
+									return modesList
 								end
 							},
 							wipemode = {
 								type = "select",
 								name = L["Wipe Mode"],
-								desc = L.opt_wipemode_desc,
+								desc = L["opt_wipemode_desc"],
 								order = 20,
 								values = function()
-									local m = {[""] = L.None}
-									for _, mode in Skada:IterateModes() do
-										m[mode.moduleName] = mode.moduleName
+									if not modesList then
+										modesList = {[""] = L["None"]}
+										local modes = Skada:GetModes()
+										for i = 1, #modes do
+											if modes[i] then
+												modesList[modes[i].moduleName] = modes[i].moduleName
+											end
+										end
 									end
-									return m
+									return modesList
 								end
 							},
 							returnaftercombat = {
@@ -1158,7 +1178,7 @@ function Skada:FrameSettings(db, include_dimensions)
 							autocurrent = {
 								type = "toggle",
 								name = L["Auto switch to current"],
-								desc = L.opt_autocurrent_desc,
+								desc = L["opt_autocurrent_desc"],
 								order = 40
 							}
 						}
@@ -1174,12 +1194,19 @@ function Skada:FrameSettings(db, include_dimensions)
 			name = L["Sticky Window"],
 			desc = L["Allows the window to stick to other Skada windows."],
 			order = 30,
-			set = function()
-				db.sticky = not db.sticky
+			set = function(_, val)
+				db.sticky = val
 				if not db.sticky then
-					for _, win in Skada:IterateWindows() do
-						if win.db.sticked[db.name] then
-							win.db.sticked[db.name] = nil
+					windows = Skada:GetWindows()
+					for i = 1, #windows do
+						local win = windows[i]
+						if win and win.db and win.db.sticked then
+							if win.db.sticked[db.name] then
+								win.db.sticked[db.name] = nil
+							end
+							if next(win.db.sticked) == nil then
+								win.db.sticked = nil
+							end
 						end
 					end
 				end
@@ -1194,11 +1221,25 @@ function Skada:FrameSettings(db, include_dimensions)
 			order = 40
 		}
 
-		obj.args.position.args.hidebuttons = {
+		obj.args.position.args.noresize = {
 			type = "toggle",
 			name = L["Disable Resize Buttons"],
 			desc = L["Resize and lock/unlock buttons won't show up when you hover over the window."],
-			order = 45
+			order = 51
+		}
+
+		obj.args.position.args.nostrech = {
+			type = "toggle",
+			name = L["Disable stretch button"],
+			desc = L["Stretch button won't show up when you hover over the window."],
+			order = 52
+		}
+
+		obj.args.position.args.botstretch = {
+			type = "toggle",
+			name = L["Reverse window stretch"],
+			desc = L["opt_botstretch_desc"],
+			order = 53
 		}
 
 		obj.args.advanced.args.childoptions = {
@@ -1218,9 +1259,11 @@ function Skada:FrameSettings(db, include_dimensions)
 					name = L["Window"],
 					order = 10,
 					values = function()
-						local list = {[""] = L.None}
-						for _, win in Skada:IterateWindows() do
-							if win.db.name ~= db.name and win.db.child ~= db.name and win.db.display == db.display then
+						local list = {[""] = L["None"]}
+						windows = Skada:GetWindows()
+						for i = 1, #windows do
+							local win = windows[i]
+							if win and win.db and win.db.name ~= db.name and win.db.child ~= db.name and win.db.display == db.display then
 								list[win.db.name] = win.db.name
 							end
 						end
@@ -1228,7 +1271,8 @@ function Skada:FrameSettings(db, include_dimensions)
 					end,
 					get = function() return db.child or "" end,
 					set = function(_, child)
-						db.child = child == "" and nil or child
+						db.child = (child == "") and nil or child
+						db.childmode = db.child and (db.childmode or 1) or nil
 						Skada:ReloadSettings()
 					end
 				},
@@ -1237,7 +1281,7 @@ function Skada:FrameSettings(db, include_dimensions)
 					name = L["Child Window Mode"],
 					order = 20,
 					values = optionsValues.CHILDMODE,
-					get = function() return db.childmode or 0 end,
+					get = function() return db.childmode or 1 end,
 					disabled = function() return not (db.child and db.child ~= "") end
 				}
 			}
@@ -1250,7 +1294,7 @@ function Skada:FrameSettings(db, include_dimensions)
 			name = L["Width"],
 			order = 70,
 			min = 100,
-			max = floor(GetScreenWidth()),
+			max = getScreenWidth(),
 			step = 0.01,
 			bigStep = 1
 		}
@@ -1282,15 +1326,11 @@ do
 		return (name ~= "") and name
 	end
 
+	local temp = {}
 	local function SerializeProfile()
-		local data = {Skada = {}}
-		Skada.tCopy(data.Skada, Skada.db.profile, {"nickname", "modeclicks"})
-		for k, v in Skada:IterateModules() do
-			if v.db and v.db.profile then
-				data[k] = v.db.profile
-			end
-		end
-		return Skada:Serialize(true, fmt("%s profile", Skada.db:GetCurrentProfile()), data)
+		wipe(temp)
+		Skada.tCopy(temp, Skada.db.profile, "modeclicks")
+		return Skada:Serialize(true, fmt("%s profile", Skada.db:GetCurrentProfile()), temp)
 	end
 
 	local function UnserializeProfile(data)
@@ -1332,6 +1372,7 @@ do
 			end)
 		else
 			editbox:DisableButton(false)
+			editbox.editBox:SetFocus()
 			editbox.button:SetScript("OnClick", function(widget)
 				Skada:ImportProfile(editbox:GetText())
 				AceGUI:Release(frame)
@@ -1376,12 +1417,7 @@ do
 		local Old_ReloadSettings = Skada.ReloadSettings
 		Skada.ReloadSettings = function(self)
 			self.ReloadSettings = Old_ReloadSettings
-			for k, v in pairs(data) do
-				local db = (k == "Skada") and Skada.db or (self:GetModule(k, true) and self.db:GetNamespace(k, true))
-				if db then
-					Skada.tCopy(db.profile, v)
-				end
-			end
+			self.tCopy(self.db.profile, data)
 			self:ReloadSettings()
 			ACR:NotifyChange("Skada")
 		end

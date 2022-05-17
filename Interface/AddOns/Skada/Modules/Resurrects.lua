@@ -6,7 +6,7 @@ Skada:AddLoadableModule("Resurrects", function(L)
 	local playermod = mod:NewModule(L["Resurrect spell list"])
 	local targetmod = mod:NewModule(L["Resurrect target list"])
 
-	local pairs, ipairs, tostring, format = pairs, ipairs, tostring, string.format
+	local pairs, tostring, format = pairs, tostring, string.format
 	local GetSpellInfo = Skada.GetSpellInfo or GetSpellInfo
 	local _
 
@@ -32,7 +32,7 @@ Skada:AddLoadableModule("Resurrects", function(L)
 			set.ress = (set.ress or 0) + 1
 
 			-- saving this to total set may become a memory hog deluxe.
-			if set == Skada.total then return end
+			if (set == Skada.total and not Skada.db.profile.totalidc) or not data.spellid then return end
 
 			-- spell
 			local spell = player.resspells and player.resspells[data.spellid]
@@ -45,11 +45,8 @@ Skada:AddLoadableModule("Resurrects", function(L)
 
 			-- spell targets
 			if data.dstName then
-				local actor = Skada:FindActor(set, data.dstGUID, data.dstName, data.dstFlags)
-				if actor then
-					spell.targets = spell.targets or {}
-					spell.targets[data.dstName] = (spell.targets[data.dstName] or 0) + 1
-				end
+				spell.targets = spell.targets or {}
+				spell.targets[data.dstName] = (spell.targets[data.dstName] or 0) + 1
 			end
 		end
 	end
@@ -70,7 +67,6 @@ Skada:AddLoadableModule("Resurrects", function(L)
 		data.dstFlags = dstFlags
 
 		Skada:DispatchSets(log_resurrect, data)
-		log_resurrect(Skada.total, data)
 	end
 
 	function playermod:Enter(win, id, label)
@@ -79,7 +75,7 @@ Skada:AddLoadableModule("Resurrects", function(L)
 	end
 
 	function playermod:Update(win, set)
-		win.title = format(L["%s's resurrect spells"], win.actorname or L.Unknown)
+		win.title = format(L["%s's resurrect spells"], win.actorname or L["Unknown"])
 		if not set or not win.actorname then return end
 
 		local actor, enemy = set:GetActor(win.actorname, win.actorid)
@@ -120,7 +116,7 @@ Skada:AddLoadableModule("Resurrects", function(L)
 	end
 
 	function targetmod:Update(win, set)
-		win.title = format(L["%s's resurrect targets"], win.actorname or L.Unknown)
+		win.title = format(L["%s's resurrect targets"], win.actorname or L["Unknown"])
 		if not set or not win.actorname then return end
 
 		local actor, enemy = set:GetActor(win.actorname, win.actorid)
@@ -169,8 +165,9 @@ Skada:AddLoadableModule("Resurrects", function(L)
 			end
 
 			local nr = 0
-			for _, player in ipairs(set.players) do
-				if (player.ress or 0) > 0 then
+			for i = 1, #set.players do
+				local player = set.players[i]
+				if player and player.ress then
 					nr = nr + 1
 					local d = win:nr(nr)
 
@@ -200,10 +197,13 @@ Skada:AddLoadableModule("Resurrects", function(L)
 			valuesort = true,
 			click1 = playermod,
 			click2 = targetmod,
-			nototalclick = {playermod, targetmod},
 			columns = {Count = true, Percent = false, sPercent = false},
 			icon = [[Interface\Icons\spell_holy_resurrection]]
 		}
+
+		-- no total click.
+		playermod.nototal = true
+		targetmod.nototal = true
 
 		Skada:RegisterForCL(
 			SpellResurrect,
@@ -249,8 +249,6 @@ Skada:AddLoadableModule("Resurrects", function(L)
 									tbl[name].class = actor.class
 									tbl[name].role = actor.role
 									tbl[name].spec = actor.spec
-								else
-									tbl[name].class = "UNKNOWN"
 								end
 							end
 						end

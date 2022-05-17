@@ -9,7 +9,7 @@ Skada:AddLoadableModule("Dispels", function(L)
 	local ignoredSpells = Skada.dummyTable -- Edit Skada\Core\Tables.lua
 
 	-- cache frequently used globals
-	local pairs, ipairs, tostring, format = pairs, ipairs, tostring, string.format
+	local pairs, tostring, format = pairs, tostring, string.format
 	local GetSpellInfo = Skada.GetSpellInfo or GetSpellInfo
 	local _
 
@@ -21,7 +21,7 @@ Skada:AddLoadableModule("Dispels", function(L)
 			set.dispel = (set.dispel or 0) + 1
 
 			-- saving this to total set may become a memory hog deluxe.
-			if set ~= Skada.total and data.spellid then
+			if (set ~= Skada.total or Skada.db.profile.totalidc) and data.spellid then
 				local spell = player.dispelspells and player.dispelspells[data.spellid]
 				if not spell then
 					player.dispelspells = player.dispelspells or {}
@@ -38,11 +38,8 @@ Skada:AddLoadableModule("Dispels", function(L)
 
 				-- the dispelled target
 				if data.dstName then
-					local actor = Skada:GetActor(set, data.dstGUID, data.dstName, data.dstFlags)
-					if actor then
-						spell.targets = spell.targets or {}
-						spell.targets[data.dstName] = (spell.targets[data.dstName] or 0) + 1
-					end
+					spell.targets = spell.targets or {}
+					spell.targets[data.dstName] = (spell.targets[data.dstName] or 0) + 1
 				end
 			end
 		end
@@ -66,7 +63,6 @@ Skada:AddLoadableModule("Dispels", function(L)
 		data.dstFlags = dstFlags
 
 		Skada:DispatchSets(log_dispel, data)
-		log_dispel(Skada.total, data)
 	end
 
 	function spellmod:Enter(win, id, label)
@@ -75,7 +71,7 @@ Skada:AddLoadableModule("Dispels", function(L)
 	end
 
 	function spellmod:Update(win, set)
-		win.title = format(L["%s's dispelled spells"], win.actorname or L.Unknown)
+		win.title = format(L["%s's dispelled spells"], win.actorname or L["Unknown"])
 
 		local player = set and set:GetPlayer(win.actorid, win.actorname)
 		local total = player and player.dispel or 0
@@ -89,7 +85,6 @@ Skada:AddLoadableModule("Dispels", function(L)
 			local nr = 0
 			for spellid, count in pairs(spells) do
 				nr = nr + 1
-
 				local d = win:nr(nr)
 
 				d.id = spellid
@@ -115,7 +110,7 @@ Skada:AddLoadableModule("Dispels", function(L)
 	end
 
 	function targetmod:Update(win, set)
-		win.title = format(L["%s's dispelled targets"], win.actorname or L.Unknown)
+		win.title = format(L["%s's dispelled targets"], win.actorname or L["Unknown"])
 
 		local player = set and set:GetPlayer(win.actorid, win.actorname)
 		local total = player and player.dispel or 0
@@ -129,7 +124,6 @@ Skada:AddLoadableModule("Dispels", function(L)
 			local nr = 0
 			for targetname, target in pairs(targets) do
 				nr = nr + 1
-
 				local d = win:nr(nr)
 
 				d.id = target.id or targetname
@@ -157,7 +151,7 @@ Skada:AddLoadableModule("Dispels", function(L)
 	end
 
 	function playermod:Update(win, set)
-		win.title = format(L["%s's dispel spells"], win.actorname or L.Unknown)
+		win.title = format(L["%s's dispel spells"], win.actorname or L["Unknown"])
 
 		local player = set and set:GetPlayer(win.actorid, win.actorname)
 		local total = player and player.dispel or 0
@@ -170,7 +164,6 @@ Skada:AddLoadableModule("Dispels", function(L)
 			local nr = 0
 			for spellid, spell in pairs(player.dispelspells) do
 				nr = nr + 1
-
 				local d = win:nr(nr)
 
 				d.id = spellid
@@ -200,10 +193,10 @@ Skada:AddLoadableModule("Dispels", function(L)
 			end
 
 			local nr = 0
-			for _, player in ipairs(set.players) do
-				if (not win.class or win.class == player.class) and (player.dispel or 0) > 0 then
+			for i = 1, #set.players do
+				local player = set.players[i]
+				if player and player.dispel and (not win.class or win.class == player.class) then
 					nr = nr + 1
-
 					local d = win:nr(nr)
 
 					d.id = player.id or player.name
@@ -236,10 +229,14 @@ Skada:AddLoadableModule("Dispels", function(L)
 			click3 = playermod,
 			click4 = Skada.FilterClass,
 			click4_label = L["Toggle Class Filter"],
-			nototalclick = {spellmod, targetmod, playermod},
 			columns = {Count = true, Percent = true, sPercent = true},
 			icon = [[Interface\Icons\spell_holy_dispelmagic]]
 		}
+
+		-- no total click.
+		spellmod.nototal = true
+		targetmod.nototal = true
+		playermod.nototal = true
 
 		Skada:RegisterForCL(
 			SpellDispel,
@@ -306,8 +303,6 @@ Skada:AddLoadableModule("Dispels", function(L)
 									tbl[name].class = actor.class
 									tbl[name].role = actor.role
 									tbl[name].spec = actor.spec
-								else
-									tbl[name].class = "UNKNOWN"
 								end
 							end
 						end

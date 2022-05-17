@@ -2,13 +2,12 @@ local Skada = Skada
 
 local mod = Skada:NewModule("BarDisplay", "SpecializedLibBars-1.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("Skada")
-local ACR = LibStub("AceConfigRegistry-3.0")
 local LibWindow = LibStub("LibWindow-1.1")
 local FlyPaper = LibStub("LibFlyPaper-1.1", true)
 
 local pairs, ipairs = pairs, ipairs
-local tsort, tContains, unpack = table.sort, tContains, unpack
-local format, max = string.format, math.max
+local tsort, tContains = table.sort, tContains
+local format, max, min = string.format, math.max, math.min
 local GetSpellLink = Skada.GetSpellLink or GetSpellLink
 local CloseDropDownMenus = CloseDropDownMenus
 local GetScreenWidth, GetScreenHeight = GetScreenWidth, GetScreenHeight
@@ -18,11 +17,19 @@ local IsControlKeyDown = IsControlKeyDown
 local IsModifierKeyDown = IsModifierKeyDown
 local _
 
+-- references
+local spellschools = nil
+local classcolors = nil
+local classcoords = nil
+local rolecoords = nil
+local speccoords = nil
+local windows = nil
+
 local COLOR_WHITE = HIGHLIGHT_FONT_COLOR
 local FONT_FLAGS = Skada.fontFlags
 if not FONT_FLAGS then
 	FONT_FLAGS = {
-		[""] = L.None,
+		[""] = L["None"],
 		["OUTLINE"] = L["Outline"],
 		["THICKOUTLINE"] = L["Thick outline"],
 		["MONOCHROME"] = L["Monochrome"],
@@ -31,11 +38,7 @@ if not FONT_FLAGS then
 	Skada.fontFlags = FONT_FLAGS
 end
 
--- class, role & specs
-local classicons, roleicons, specicons
-local classcoords, rolecoords, speccoords
-
-local function WindowOnMouseDown(self, button)
+local function listOnMouseDown(self, button)
 	if IsShiftKeyDown() then
 		Skada:OpenMenu(self.win)
 	elseif button == "RightButton" and IsControlKeyDown() then
@@ -47,15 +50,19 @@ local function WindowOnMouseDown(self, button)
 	end
 end
 
-local function TitleButtonOnClick(self, button)
+local function anchorOnClick(self, button)
 	local bargroup = self:GetParent()
-	if not bargroup then return end
-	if IsShiftKeyDown() then
-		Skada:OpenMenu(bargroup.win)
-	elseif button == "RightButton" and IsControlKeyDown() then
-		Skada:SegmentMenu(bargroup.win)
-	elseif button == "RightButton" and not IsAltKeyDown() then
-		bargroup.win:RightClick(nil, button)
+	-- other buttons are reserved for other actions
+	if bargroup and button == "RightButton" then
+		if IsShiftKeyDown() then
+			Skada:OpenMenu(bargroup.win)
+		elseif IsControlKeyDown() then
+			Skada:SegmentMenu(bargroup.win)
+		elseif IsAltKeyDown() then
+			Skada:ModeMenu(bargroup.win)
+		elseif not bargroup.clickthrough then
+			bargroup.win:RightClick(nil, button)
+		end
 	end
 end
 
@@ -76,31 +83,47 @@ do
 	end
 
 	local function resetOnClick(self, button)
-		Skada:ShowPopup(self.list.win)
+		if button == "LeftButton" then
+			Skada:ShowPopup(self.list.win)
+		end
 	end
 
 	local function segmentOnClick(self, button)
-		if button == "MiddleButton" then
-			self.list.win:set_selected_set("current")
-		elseif IsModifierKeyDown() then
+		if IsModifierKeyDown() then
 			self.list.win:set_selected_set(nil, button == "RightButton" and 1 or -1)
-		else
+		elseif button == "MiddleButton" or button == "RightButton" then
+			self.list.win:set_selected_set("current")
+		elseif button == "LeftButton" then
 			Skada:SegmentMenu(self.list.win)
 		end
 	end
 
 	local function modeOnClick(self, button)
-		Skada:ModeMenu(self.list.win)
+		if button == "LeftButton" then
+			Skada:ModeMenu(self.list.win)
+		end
 	end
 
 	local function reportOnClick(self, button)
-		Skada:OpenReportWindow(self.list.win)
+		if button == "LeftButton" then
+			Skada:OpenReportWindow(self.list.win)
+		end
 	end
 
 	local function stopOnClick(self, button)
-		if Skada.current and Skada.current.stopped then
+		if not Skada.current then
+			return
+		elseif Skada.tempsets and #Skada.tempsets > 0 then
+			if (IsShiftKeyDown() or button == "RightButton") and Skada.current.stopped then
+				Skada:ResumeSegment()
+			elseif IsShiftKeyDown() or button == "RightButton" then
+				Skada:StopSegment()
+			else
+				Skada:PhaseMenu(self.list.win)
+			end
+		elseif button == "LeftButton" and Skada.current.stopped then
 			Skada:ResumeSegment()
-		elseif Skada.current then
+		elseif button == "LeftButton" and Skada.current then
 			Skada:StopSegment()
 		end
 	end
@@ -109,6 +132,11 @@ do
 		-- Re-use bargroup if it exists.
 		local p = window.db
 		local bargroup = mod:GetBarGroup(p.name)
+
+		-- fix old oriantation
+		if p.barorientation == 3 then
+			p.barorientation = 2
+		end
 
 		-- Save a reference to window in bar group. Needed for some nasty callbacks.
 		if bargroup then
@@ -125,12 +153,12 @@ do
 			)
 
 			-- Add window buttons.
-			AddWindowButton(bargroup, p.title.toolbar, "config", L.Configure, L.btn_config_desc, configOnClick)
-			AddWindowButton(bargroup, p.title.toolbar, "reset", RESET, L.btn_reset_desc, resetOnClick)
-			AddWindowButton(bargroup, p.title.toolbar, "segment", L.Segment, L.btn_segment_desc, segmentOnClick)
-			AddWindowButton(bargroup, p.title.toolbar, "mode", L.Mode, L["Jump to a specific mode."], modeOnClick)
-			AddWindowButton(bargroup, p.title.toolbar, "report", L.Report, L.btn_report_desc, reportOnClick)
-			AddWindowButton(bargroup, p.title.toolbar, "stop", L.Stop, L.btn_stop_desc, stopOnClick)
+			AddWindowButton(bargroup, p.title.toolbar, "config", L["Configure"], L["btn_config_desc"], configOnClick)
+			AddWindowButton(bargroup, p.title.toolbar, "reset", L["Reset"], L["btn_reset_desc"], resetOnClick)
+			AddWindowButton(bargroup, p.title.toolbar, "segment", L["Segment"], L["btn_segment_desc"], segmentOnClick)
+			AddWindowButton(bargroup, p.title.toolbar, "mode", L["Mode"], L["Jump to a specific mode."], modeOnClick)
+			AddWindowButton(bargroup, p.title.toolbar, "report", L["Report"], L["btn_report_desc"], reportOnClick)
+			AddWindowButton(bargroup, p.title.toolbar, "stop", L["Stop"], L["btn_stop_desc"], stopOnClick)
 		end
 
 		bargroup.win = window
@@ -138,22 +166,29 @@ do
 		bargroup.RegisterCallback(mod, "BarClick")
 		bargroup.RegisterCallback(mod, "BarEnter")
 		bargroup.RegisterCallback(mod, "BarLeave")
-		bargroup.RegisterCallback(mod, "AnchorMoved")
-		bargroup.RegisterCallback(mod, "WindowResizing")
+
+		bargroup.RegisterCallback(mod, "WindowMoveStart")
+		bargroup.RegisterCallback(mod, "WindowMoveStop")
+
 		bargroup.RegisterCallback(mod, "WindowResized")
 		bargroup.RegisterCallback(mod, "WindowLocked")
+		bargroup.RegisterCallback(mod, "WindowResizing")
+
+		bargroup.RegisterCallback(mod, "WindowStretching")
+		bargroup.RegisterCallback(mod, "WindowStretchStart")
+		bargroup.RegisterCallback(mod, "WindowStretchStop")
+
 		bargroup:EnableMouse(true)
-		bargroup:SetScript("OnMouseDown", WindowOnMouseDown)
-		bargroup:SetScript("OnShow", function(self) self:SetMaxBars(nil, p.snapto) end)
-		bargroup.button:SetScript("OnClick", TitleButtonOnClick)
-		bargroup:HideIcon()
+		bargroup:SetScript("OnMouseDown", listOnMouseDown)
+		bargroup.button:SetScript("OnClick", anchorOnClick)
+		bargroup:HideBarIcons()
 
 		local titletext = bargroup.button:GetFontString()
 		titletext:SetWordWrap(false)
 		titletext:SetPoint("LEFT", bargroup.button, "LEFT", 5, 1)
 		titletext:SetJustifyH("LEFT")
 		bargroup.button:SetHeight(p.title.height or 15)
-		bargroup:SetButtonMouseOver(p.title.hovermode)
+		bargroup:SetAnchorMouseover(p.title.hovermode)
 
 		-- Register with LibWindow-1.0.
 		LibWindow.RegisterConfig(bargroup, p)
@@ -161,19 +196,7 @@ do
 		-- Restore window position.
 		LibWindow.RestorePosition(bargroup)
 
-		bargroup:SetMaxBars(nil, p.snapto)
 		window.bargroup = bargroup
-
-		if not classicons then
-			classicons = Skada.classicons
-			classcoords = Skada.classcoords
-
-			roleicons = Skada.roleicons
-			rolecoords = Skada.rolecoords
-
-			specicons = Skada.specicons
-			speccoords = Skada.speccoords
-		end
 	end
 end
 
@@ -187,11 +210,8 @@ function mod:Wipe(win)
 		win.bargroup:SetSortFunction(nil)
 		win.bargroup:SetBarOffset(0)
 
-		local bars = win.bargroup:GetBars()
-		if bars then
-			for _, bar in pairs(bars) do
-				win.bargroup:RemoveBar(bar)
-			end
+		for _, bar in pairs(win.bargroup:GetBars()) do
+			win.bargroup:RemoveBar(bar)
 		end
 
 		win.bargroup:SortBars()
@@ -223,13 +243,11 @@ function mod:SetTitle(win, title)
 
 		-- module icon
 		if not win.db.moduleicons then
-			win.bargroup:HideButtonIcon()
+			win.bargroup:HideAnchorIcon()
 		elseif win.selectedmode and win.selectedmode.metadata and win.selectedmode.metadata.icon then
-			win.bargroup:SetButtonIcon(win.selectedmode.metadata.icon)
-			win.bargroup:ShowButtonIcon()
+			win.bargroup:ShowAnchorIcon(win.selectedmode.metadata.icon)
 		elseif win.parentmode and win.parentmode.metadata and win.parentmode.metadata.icon then
-			win.bargroup:SetButtonIcon(win.parentmode.metadata.icon)
-			win.bargroup:ShowButtonIcon()
+			win.bargroup:ShowAnchorIcon(win.parentmode.metadata.icon)
 		end
 	end
 end
@@ -243,10 +261,6 @@ do
 			ttactive = true
 			Skada:SetTooltipPosition(GameTooltip, win.bargroup, win.db.display, win)
 			Skada:ShowTooltip(win, id, label, bar)
-			if not win.db.disablehighlight then
-				bar:SetOpacity(1)
-				bar:SetBackdropColor(0, 0, 0, 0.25)
-			end
 		end
 	end
 
@@ -254,10 +268,6 @@ do
 		if ttactive then
 			GameTooltip:Hide()
 			ttactive = false
-		end
-		if not bar.win.db.disablehighlight then
-			bar:SetOpacity(0.85)
-			bar:SetBackdropColor(0, 0, 0, 0)
 		end
 	end
 end
@@ -268,90 +278,131 @@ do
 	local Xanchors = {LT = true, LB = true, LC = true, RT = true, RB = true, RC = true}
 	local Yanchors = {TL = true, TR = true, TC = true, BL = true, BR = true, BC = true}
 
-	function mod:AnchorMoved(_, group, x, y)
+	function mod:WindowMoveStop(_, group, x, y)
+		LibWindow.SavePosition(group) -- save window position
+
+		-- handle sticked windows
 		if FlyPaper and group.win.db.sticky and not group.locked then
-			-- correction due to stupid border texture
-			local offset = group.win.db.background.borderthickness
+			local p = group.win.db
+
+			-- attempt to stick to the closest frame.
+			local offset = p.background.borderthickness
 			local anchor, name, frame = FlyPaper.StickToClosestFrameInGroup(group, "Skada", nil, offset, offset)
 
+			-- found a frame to stick it to?
 			if anchor and frame and frame.win then
-				frame.win.db.sticked[group.win.db.name] = true
-				group.win.db.sticked[name] = nil
+				-- change the window it is sticked to.
+				frame.win.db.sticked = frame.win.db.sticked or {}
+				frame.win.db.sticked[p.name] = true
+
+				-- if the window that we are sticking this one to was
+				-- sticked to it, we make sure to remove it from table.
+				if p.sticked then
+					p.sticked[name] = nil
+				end
 
 				-- bar spacing first
-				group.win.db.barspacing = frame.win.db.barspacing
-				group:SetSpacing(group.win.db.barspacing)
+				p.barspacing = frame.win.db.barspacing
+				group:SetSpacing(p.barspacing)
 
 				-- change the width of the window accordingly
 				if Yanchors[anchor] then
 					-- we change things related to height
-					group.win.db.barwidth = frame.win.db.barwidth
-					group:SetLength(group.win.db.barwidth)
+					p.barwidth = frame.win.db.barwidth
+					group:SetLength(p.barwidth)
 				elseif Xanchors[anchor] then
 					-- window height
-					group.win.db.background.height = frame.win.db.background.height
-					group:SetHeight(group.win.db.background.height)
+					p.background.height = frame.win.db.background.height
+					group:SetHeight(p.background.height)
 
 					-- title bar height
-					group.win.db.title.height = frame.win.db.title.height
-					group.button:SetHeight(group.win.db.title.height)
+					p.title.height = frame.win.db.title.height
+					group.button:SetHeight(p.title.height)
 					group:AdjustButtons()
 
 					-- bars height
-					group.win.db.barheight = frame.win.db.barheight
-					group:SetBarHeight(group.win.db.barheight)
+					p.barheight = frame.win.db.barheight
+					group:SetBarHeight(p.barheight)
 
 					group:SortBars()
 				end
 			else
-				for _, win in Skada:IterateWindows() do
-					if win.db.display == "bar" and win.db.sticked and win.db.sticked[group.win.db.name] then
-						win.db.sticked[group.win.db.name] = nil
+				-- the window wasn't sticked to any? remove just incase
+				windows = Skada:GetWindows()
+				for i = 1, #windows do
+					local win = windows[i]
+					if win and win.db and win.db.name ~= p.name and win.db.display == "bar" then
+						if win.db.sticked then
+							if win.db.sticked[p.name] then
+								win.db.sticked[p.name] = nil
+							end
+							-- remove table if empty
+							if next(win.db.sticked) == nil then
+								win.db.sticked = nil
+							end
+						elseif p.sticked and p.sticked[win.db.name] then
+							LibWindow.SavePosition(win.bargroup)
+						end
 					end
 				end
 			end
 		end
 
 		CloseDropDownMenus()
-		LibWindow.SavePosition(group)
-		ACR:NotifyChange("Skada")
+	end
+end
+
+function mod:WindowMoveStart(_, group, startX, startY)
+	if FlyPaper and group and group.win and group.win.db then
+		if group.win.db.hidden then return end
+
+		local offset = group.win.db.background.borderthickness
+		windows = Skada:GetWindows()
+		for i = 1, #windows do
+			local win = windows[i]
+			if win and win.db and win.db.display == "bar" and win.bargroup:IsShown() and group.win.db.sticked and group.win.db.sticked[win.db.name] then
+				FlyPaper.Stick(win.bargroup, group, nil, offset, offset)
+			end
+		end
 	end
 end
 
 function mod:WindowResized(_, group)
-	local db, height = group.win.db, group:GetHeight()
+	local p = group.win.db
+	local width, height = group:GetSize()
 
 	-- Snap to best fit
-	if db.snapto then
-		local maxbars = group:GuessMaxBars(true)
-		local snapheight = height
+	if p.snapto then
+		local maxbars = group:GetMaxBars()
+		local oheight = height
 
-		if db.enabletitle then
-			snapheight = db.title.height + ((db.barheight + db.barspacing) * maxbars) - db.barspacing
+		if p.enabletitle then
+			oheight = p.title.height + ((p.barheight + p.barspacing) * maxbars) - p.barspacing
 		else
-			snapheight = ((db.barheight + db.barspacing) * maxbars) - db.barspacing
+			oheight = ((p.barheight + p.barspacing) * maxbars) - p.barspacing
 		end
 
-		height = snapheight
+		height = oheight
 	end
 
 	LibWindow.SavePosition(group)
-	db.background.height = height
-	db.barwidth = group:GetWidth()
+
+	p.barwidth = width
+	p.background.height = height
 
 	-- resize sticked windows as well.
 	if FlyPaper then
-		local offset = db.background.borderthickness
-		for _, win in Skada:IterateWindows() do
-			if win.db.display == "bar" and win.bargroup:IsShown() and db.sticked[win.db.name] then
-				win.bargroup.callbacks:Fire("AnchorMoved", win.bargroup)
+		local offset = p.background.borderthickness
+		windows = Skada:GetWindows()
+		for i = 1, #windows do
+			local win = windows[i]
+			if win and win.db and win.db.display == "bar" and win.bargroup:IsShown() and p.sticked and p.sticked[win.db.name] then
+				win.bargroup.callbacks:Fire("WindowMoveStop", win.bargroup)
 			end
 		end
 	end
 
-	group:SetMaxBars(nil, db.snapto)
-	Skada:ApplySettings(db.name)
-	ACR:NotifyChange("Skada")
+	Skada:ApplySettings(p.name)
 end
 
 function mod:WindowLocked(_, group, locked)
@@ -360,19 +411,44 @@ function mod:WindowLocked(_, group, locked)
 	end
 end
 
-do
-	local barbackdrop = {bgFile = [[Interface\Buttons\WHITE8X8]]}
-	function mod:CreateBar(win, name, label, value, maxvalue, icon, o)
-		local bar, isnew = win.bargroup:NewBar(name, label, value, maxvalue, icon, o)
-		bar.win = win
-		bar.iconFrame:SetScript("OnEnter", nil)
-		bar.iconFrame:SetScript("OnLeave", nil)
-		bar.iconFrame:SetScript("OnMouseDown", nil)
-		bar.iconFrame:EnableMouse(false)
-		bar:SetBackdrop(win.db.disablehighlight and nil or barbackdrop)
-		bar:SetBackdropColor(0, 0, 0, 0)
-		return bar, isnew
+function mod:WindowStretching(_, group)
+	if group and group.backdropA and group.backdropA < 0.85 then
+		group.backdropA = min(0.85, max(0, group.backdropA + 0.015))
+		group:SetBackdropColor(group.backdropR, group.backdropG, group.backdropB, group.backdropA)
 	end
+end
+
+function mod:WindowStretchStart(_, group)
+	if group then
+		group.backdropR, group.backdropG, group.backdropB, group.backdropA = group:GetBackdropColor()
+		group:SetBackdropColor(0, 0, 0, group.backdropA)
+		group:SetFrameStrata("TOOLTIP")
+	end
+	CloseDropDownMenus()
+end
+
+function mod:WindowStretchStop(_, group)
+	if group and group.win and group.win.db then
+		-- not longer needed
+		group.backdropR = nil
+		group.backdropG = nil
+		group.backdropB = nil
+		group.backdropA = nil
+
+		local p = group.win.db
+		group:SetBackdropColor(p.background.color.r, p.background.color.g, p.background.color.b, p.background.color.a or 1)
+		group:SetFrameStrata(p.strata)
+	end
+end
+
+function mod:CreateBar(win, name, label, value, maxvalue, icon, o)
+	local bar, isnew = win.bargroup:NewBar(name, label, value, maxvalue, icon, o)
+	bar.win = win
+	bar.iconFrame:SetScript("OnEnter", nil)
+	bar.iconFrame:SetScript("OnLeave", nil)
+	bar.iconFrame:SetScript("OnMouseDown", nil)
+	bar.iconFrame:EnableMouse(false)
+	return bar, isnew
 end
 
 -- ======================================================= --
@@ -381,7 +457,7 @@ do
 	local function inserthistory(win)
 		if win.selectedmode and win.history[#win.history] ~= win.selectedmode then
 			win.history[#win.history + 1] = win.selectedmode
-			if win.child and win.db.childmode ~= 1 then
+			if win.child and (win.db.childmode == 1 or win.db.childmode == 3) then
 				inserthistory(win.child)
 			end
 		end
@@ -389,13 +465,13 @@ do
 
 	local function onEnter(win, id, label, mode)
 		mode:Enter(win, id, label)
-		if win.child and win.db.childmode ~= 1 then
+		if win.child and (win.db.childmode == 1 or win.db.childmode == 3) then
 			onEnter(win.child, id, label, mode)
 		end
 	end
 
 	local function showmode(win, id, label, mode)
-		if win.selectedset == "total" and win.metadata.nototalclick and tContains(win.metadata.nototalclick, mode) then
+		if Skada:NoTotalClick(win.selectedset, mode) then
 			return
 		end
 
@@ -453,16 +529,16 @@ do
 		end
 	end
 
-	local function BarResize(bar)
+	local function barOnSizeChanged(bar)
 		if bar.bgwidth then
-			bar.bgtexture:SetWidth(bar.bgwidth * bar:GetWidth())
+			bar.bg:SetWidth(bar.bgwidth * bar:GetWidth())
 		else
 			bar:SetScript("OnSizeChanged", bar.OnSizeChanged)
 		end
 		bar:OnSizeChanged()
 	end
 
-	local function BarIconEnter(icon)
+	local function iconOnEnter(icon)
 		local bar = icon.bar
 		local win = bar.win
 		if bar.link and win and win.bargroup then
@@ -472,7 +548,7 @@ do
 		end
 	end
 
-	local function BarIconMouseDown(icon)
+	local function iconOnMouseDown(icon)
 		local bar = icon.bar
 		if not IsShiftKeyDown() or not bar.link then
 			return
@@ -485,39 +561,60 @@ do
 		end
 	end
 
-	local function HideGameTooltip()
-		GameTooltip:Hide()
-	end
-
 	local function value_sort(a, b)
 		if not a or a.value == nil then
 			return false
 		elseif not b or b.value == nil then
 			return true
+		elseif a.value < b.value then
+			return false
+		elseif a.value > b.value then
+			return true
+		elseif not a.label then
+			return false
+		elseif not b.label then
+			return true
 		else
-			return a.value > b.value
+			return a.label > b.label
 		end
 	end
 
 	local function bar_order_sort(a, b)
-		return a and b and a.order and b.order and a.order < b.order
+		if not a or a.order == nil then
+			return true
+		elseif not b or b.order == nil then
+			return false
+		elseif a.order < b.order then
+			return true
+		elseif a.order > b.order then
+			return false
+		elseif not a.GetLabel then
+			return true
+		elseif not b.GetLabel then
+			return false
+		else
+			return a:GetLabel() < b:GetLabel()
+		end
 	end
 
 	local function bar_setcolor(bar, db, data, color)
 		if not color then
 			color = db.barcolor or Skada.windowdefaults.barcolor
+			local a = color.a or 1
 
 			if data.color then
 				color = data.color
-			elseif db.spellschoolcolors and data.spellschool and Skada.spellschools[data.spellschool] then
-				color = Skada.spellschools[data.spellschool]
-			elseif db.classcolorbars and data.class and Skada.classcolors[data.class] then
-				color = Skada.classcolors[data.class]
+				bar:SetColor(color.r, color.g, color.b, color.a or a, true)
+			elseif db.spellschoolcolors and data.spellschool and spellschools[data.spellschool] then
+				color = spellschools[data.spellschool]
+				bar:SetColor(color.r, color.g, color.b, color.a or a, true)
+			elseif db.classcolorbars and data.class and classcolors[data.class] then
+				color = classcolors(data.class)
+				bar:SetColor(color.r, color.g, color.b, color.a or a, true)
+			else
+				bar:SetColor(color.r, color.g, color.b, a)
 			end
 		end
-
-		color.a = db.disablehighlight and (color.a or 1) or 0.85
-		bar:SetColorAt(0, color.r, color.g, color.b, color.a)
 	end
 
 	function mod:Update(win)
@@ -542,25 +639,20 @@ do
 		end
 
 		if hasicon and not win.bargroup.showIcon then
-			win.bargroup:ShowIcon()
+			win.bargroup:ShowBarIcons()
 		end
 		if not hasicon and win.bargroup.showIcon then
-			win.bargroup:HideIcon()
+			win.bargroup:HideBarIcons()
 		end
 
 		if win.metadata.wipestale then
-			local bars = win.bargroup:GetBars()
-			if bars then
-				for _, bar in pairs(bars) do
-					bar.checked = false
-				end
+			for _, bar in pairs(win.bargroup:GetBars()) do
+				bar.checked = nil
 			end
 		end
 
-		local maxbars = (win.selectedmode and win.db.barmax > 0) and win.db.barmax or 100
-		local numbars, nr = 0, 1
+		local nr = 1
 		for i, data in ipairs(win.dataset) do
-			if numbars == maxbars then break end
 			if data.id then
 				local bar = win.bargroup:GetBar(data.id)
 
@@ -571,7 +663,6 @@ do
 				end
 
 				if bar then
-					numbars = numbars + 1
 					bar:SetValue(data.value)
 					bar:SetMaxValue(win.metadata.maxvalue or 1)
 				else
@@ -582,7 +673,6 @@ do
 					bar.fixed = nil
 
 					if not data.ignore then
-						numbars = numbars + 1
 						if data.icon then
 							bar:ShowIcon()
 
@@ -596,9 +686,9 @@ do
 							if bar.link then
 								bar.iconFrame.bar = bar
 								bar.iconFrame:EnableMouse(true)
-								bar.iconFrame:SetScript("OnEnter", BarIconEnter)
-								bar.iconFrame:SetScript("OnLeave", HideGameTooltip)
-								bar.iconFrame:SetScript("OnMouseDown", BarIconMouseDown)
+								bar.iconFrame:SetScript("OnEnter", iconOnEnter)
+								bar.iconFrame:SetScript("OnLeave", GameTooltip_Hide)
+								bar.iconFrame:SetScript("OnMouseDown", iconOnMouseDown)
 							end
 						end
 
@@ -620,13 +710,13 @@ do
 
 					if win.db.specicons and speccoords and data.spec and speccoords[data.spec] then
 						bar:ShowIcon()
-						bar:SetIcon(specicons, unpack(speccoords[data.spec]))
+						bar:SetIcon(Skada.specicons, speccoords(data.spec))
 					elseif win.db.roleicons and rolecoords and data.role and data.role ~= "NONE" and rolecoords[data.role] then
 						bar:ShowIcon()
-						bar:SetIcon(roleicons, unpack(rolecoords[data.role]))
+						bar:SetIcon(Skada.roleicons, rolecoords(data.role))
 					elseif win.db.classicons and data.class and classcoords[data.class] and data.icon == nil then
 						bar:ShowIcon()
-						bar:SetIcon(classicons, unpack(classcoords[data.class]))
+						bar:SetIcon(Skada.classicons, classcoords(data.class))
 					elseif not data.ignore and not data.spellid and not data.hyperlink then
 						if data.icon and not bar:IsIconShown() then
 							bar:ShowIcon()
@@ -639,10 +729,10 @@ do
 
 					if
 						data.class and
-						Skada.classcolors[data.class] and
+						classcolors[data.class] and
 						(win.db.classcolortext or win.db.classcolorleft or win.db.classcolorright)
 					then
-						local c = Skada.classcolors[data.class]
+						local c = classcolors(data.class)
 						if win.db.classcolortext or win.db.classcolorleft then
 							bar.label:SetTextColor(c.r, c.g, c.b, c.a or 1)
 						end
@@ -666,12 +756,12 @@ do
 
 				if win.metadata.showspots and Skada.db.profile.showranks and not data.ignore then
 					if win.db.barorientation == 1 then
-						bar:SetLabel(format("%d. %s", nr, data.text or data.label or L.Unknown))
+						bar:SetLabel(format("%d. %s", nr, data.text or data.label or L["Unknown"]))
 					else
-						bar:SetLabel(format("%s .%d", data.text or data.label or L.Unknown, nr))
+						bar:SetLabel(format("%s .%d", data.text or data.label or L["Unknown"], nr))
 					end
 				else
-					bar:SetLabel(data.text or data.label or L.Unknown)
+					bar:SetLabel(data.text or data.label or L["Unknown"])
 				end
 				bar:SetTimerLabel(data.valuetext)
 
@@ -688,7 +778,7 @@ do
 				end
 
 				if data.backgroundcolor then
-					bar.bgtexture:SetVertexColor(
+					bar.bg:SetVertexColor(
 						data.backgroundcolor.r,
 						data.backgroundcolor.g,
 						data.backgroundcolor.b,
@@ -697,12 +787,12 @@ do
 				end
 
 				if data.backgroundwidth then
-					bar.bgtexture:ClearAllPoints()
-					bar.bgtexture:SetPoint("BOTTOMLEFT")
-					bar.bgtexture:SetPoint("TOPLEFT")
+					bar.bg:ClearAllPoints()
+					bar.bg:SetPoint("BOTTOMLEFT")
+					bar.bg:SetPoint("TOPLEFT")
 					bar.bgwidth = data.backgroundwidth
-					bar:SetScript("OnSizeChanged", BarResize)
-					BarResize(bar)
+					bar:SetScript("OnSizeChanged", barOnSizeChanged)
+					barOnSizeChanged(bar)
 				else
 					bar.bgwidth = nil
 				end
@@ -722,8 +812,7 @@ do
 		end
 
 		if win.metadata.wipestale then
-			local bars = win.bargroup:GetBars()
-			for _, bar in pairs(bars) do
+			for _, bar in pairs(win.bargroup:GetBars()) do
 				if not bar.checked then
 					win.bargroup:RemoveBar(bar)
 				end
@@ -837,87 +926,8 @@ end
 -- ======================================================= --
 
 do
-	local titlebackdrop = {}
-	local windowbackdrop = {}
-
-	local lastStretchTime = 0
-	local function stretch(self, elapsed)
-		lastStretchTime = lastStretchTime + elapsed
-		if lastStretchTime > 0.01 then
-			self:SortBars()
-			if self:GetHeight() >= 500 then
-				self:StopMovingOrSizing()
-			end
-			lastStretchTime = 0
-		end
-	end
-
-	local function move(self, button)
-		local group = self:GetParent()
-		if group then
-			if button == "MiddleButton" or (button == "LeftButton" and group.locked) then
-				group.isStretching = true
-				group:StartSizing(IsModifierKeyDown() and "BOTTOM" or "TOP")
-				group:SetScript("OnUpdate", stretch)
-
-				CloseDropDownMenus()
-				group:SetBackdropColor(0, 0, 0, 0.9)
-				group:SetFrameStrata("TOOLTIP")
-			elseif button == "LeftButton" and not group.locked then
-				self.startX = group:GetLeft()
-				self.startY = group:GetTop()
-				group:StartMoving()
-
-				-- move sticked windows.
-				if FlyPaper and group.win.db.sticky and not group.win.db.hidden then
-					local offset = group.win.db.background.borderthickness
-					for _, win in Skada:IterateWindows() do
-						if win.db.display == "bar" and win.bargroup:IsShown() and group.win.db.sticked[win.db.name] then
-							FlyPaper.Stick(win.bargroup, group, nil, offset, offset)
-							win.bargroup.button.startX = win.bargroup:GetLeft()
-							win.bargroup.button.startY = win.bargroup:GetTop()
-							move(win.bargroup.button, "LeftButton")
-						end
-					end
-				end
-			end
-		end
-	end
-
-	local function stopMove(self, button)
-		local group = self:GetParent()
-		if group then
-			if group.isStretching then
-				group.isStretching = nil
-				group:StopMovingOrSizing()
-				group:SetScript("OnUpdate", nil)
-
-				local p = group.win.db
-				group:SetBackdropColor(p.background.color.r, p.background.color.g, p.background.color.b, p.background.color.a or 1)
-				group:SetFrameStrata(p.strata)
-				group.win.bargroup:SetHeight(p.background.height)
-				LibWindow.RestorePosition(group.win.bargroup)
-			elseif button == "LeftButton" and not group.locked then
-				group:StopMovingOrSizing()
-				local endX = group:GetLeft()
-				local endY = group:GetTop()
-				if self.startX ~= endX or self.startY ~= endY then
-					group.callbacks:Fire("AnchorMoved", group, endX, endY)
-					if FlyPaper and group.win.db.sticky and not group.win.db.hidden then
-						for _, win in Skada:IterateWindows() do
-							if win.db.display == "bar" and win.bargroup:IsShown() and group.win.db.sticked[win.db.name] then
-								local xOfs, yOfs = win.bargroup:GetLeft(), win.bargroup:GetTop()
-								if win.bargroup.startX ~= xOfs or win.bargroup.startY ~= yOfs then
-									win.bargroup.callbacks:Fire("AnchorMoved", win.bargroup, xOfs, yOfs)
-									stopMove(win.bargroup.button, "LeftButton")
-								end
-							end
-						end
-					end
-				end
-			end
-		end
-	end
+	local backdrop = {}
+	local backdrop_insets = {left = 0, right = 0, top = 0, bottom = 0}
 
 	-- Called by Skada windows when window settings have changed.
 	function mod:ApplySettings(win)
@@ -934,32 +944,20 @@ do
 		g:SetHeight(p.background.height)
 		g:SetWidth(p.barwidth)
 		g:SetLength(p.barwidth)
-		g:SetTexture(p.bartexturepath or Skada:MediaFetch("statusbar", p.bartexture))
+		g:SetTexture(Skada:MediaFetch("statusbar", p.bartexture))
+		g:SetDisableHighlight(p.disablehighlight)
 		g:SetBarBackgroundColor(p.barbgcolor.r, p.barbgcolor.g, p.barbgcolor.b, p.barbgcolor.a or 0.6)
-		g:SetButtonMouseOver(p.title.hovermode)
+		g:SetAnchorMouseover(p.title.hovermode)
 		g:SetButtonsOpacity(p.title.toolbaropacity or 0.25)
-		g:SetButtonSpacing(p.title.spacing or 1)
+		g:SetButtonsSpacing(p.title.spacing or 1)
 		g:SetUseSpark(p.spark)
-		g:SetMouseEnter(not p.hidebuttons)
-
-		g:SetFont(
-			p.barfontpath or Skada:MediaFetch("font", p.barfont),
-			p.barfontsize,
-			p.barfontflags,
-			p.numfontpath or Skada:MediaFetch("font", p.numfont),
-			p.numfontsize,
-			p.numfontflags
-		)
-
+		g:SetDisableResize(p.noresize)
+		g:SetDisableStretch(p.nostrech)
+		g:SetReverseStretch(p.botstretch)
+		g:SetFont(Skada:MediaFetch("font", p.barfont), p.barfontsize, p.barfontflags, Skada:MediaFetch("font", p.numfont), p.numfontsize, p.numfontflags)
 		g:SetSpacing(p.barspacing)
-		g:UnsetAllColors()
-		g:SetColorAt(0, p.barcolor.r, p.barcolor.g, p.barcolor.b, p.barcolor.a)
-
-		if p.barslocked then
-			g:Lock()
-		else
-			g:Unlock()
-		end
+		g:SetColor(p.barcolor.r, p.barcolor.g, p.barcolor.b, p.barcolor.a)
+		g:SetLocked(p.barslocked)
 
 		if p.strata then
 			g:SetFrameStrata(p.strata)
@@ -973,24 +971,18 @@ do
 		end
 		g.button:SetNormalFontObject(fo)
 
-		titlebackdrop.bgFile = Skada:MediaFetch("statusbar", p.title.texture)
-		titlebackdrop.tile = false
-		titlebackdrop.tileSize = 0
-		titlebackdrop.edgeSize = p.title.borderthickness
-		g.button:SetBackdrop(titlebackdrop)
-
 		local color = p.title.color
-		g.button:SetBackdropColor(color.r, color.g, color.b, color.a or 1)
+		g.button.bg:SetTexture(Skada:MediaFetch("statusbar", p.title.texture))
+		g.button.bg:SetVertexColor(color.r, color.g, color.b, color.a or 1)
 		g.button:SetHeight(p.title.height or 15)
-
-		Skada:ApplyBorder(g.button, p.title.bordertexture, p.title.bordercolor, p.title.borderthickness)
 
 		g.button.toolbar = g.button.toolbar or p.title.toolbar or 1
 		if g.button.toolbar ~= p.title.toolbar then
 			g.button.toolbar = p.title.toolbar or 1
-			for i, b in ipairs(g.buttons) do
-				b:GetNormalTexture():SetTexture(format(buttonsTexPath, g.button.toolbar, b.index))
-				b:GetHighlightTexture():SetTexture(format(buttonsTexPath, g.button.toolbar, b.index), 1.0)
+			for i = 1, #g.buttons do
+				local b = g.buttons[i]
+				b.normalTex:SetTexture(format(buttonsTexPath, g.button.toolbar, b.index))
+				b.highlightTex:SetTexture(format(buttonsTexPath, g.button.toolbar, b.index), 1.0)
 			end
 		end
 
@@ -998,38 +990,33 @@ do
 			g:ShowAnchor()
 
 			g:ShowButton(L["Configure"], p.buttons.menu)
-			g:ShowButton(RESET, p.buttons.reset)
+			g:ShowButton(L["Reset"], p.buttons.reset)
 			g:ShowButton(L["Segment"], p.buttons.segment)
 			g:ShowButton(L["Mode"], p.buttons.mode)
 			g:ShowButton(L["Report"], p.buttons.report)
 			g:ShowButton(L["Stop"], p.buttons.stop)
-
-			g.button:SetScript("OnMouseDown", move)
-			g.button:SetScript("OnMouseUp", stopMove)
 		else
 			g:HideAnchor()
-
-			g.button:SetScript("OnMouseDown", nil)
-			g.button:SetScript("OnMouseUp", nil)
 		end
 
 		-- Window border
-		Skada:ApplyBorder(g, p.background.bordertexture, p.background.bordercolor, p.background.borderthickness)
+		Skada:ApplyBorder(g, p.background.bordertexture, p.background.bordercolor, p.background.borderthickness, p.background.borderinsets)
 
-		windowbackdrop.bgFile = p.background.texturepath or Skada:MediaFetch("background", p.background.texture)
-		windowbackdrop.tile = p.background.tile
-		windowbackdrop.tileSize = p.background.tilesize
-		windowbackdrop.insets = {left = 0, right = 0, top = 0, bottom = 0}
+		backdrop_insets.left, backdrop_insets.right, backdrop_insets.top, backdrop_insets.bottom = 0, 0, 0, 0
+		backdrop.bgFile = p.background.texturepath or Skada:MediaFetch("background", p.background.texture)
+		backdrop.tile = p.background.tile
+		backdrop.tileSize = p.background.tilesize
+		backdrop.insets = backdrop_insets
 		if p.enabletitle then
 			if p.reversegrowth then
-				windowbackdrop.insets.top = 0
-				windowbackdrop.insets.bottom = p.title.height
+				backdrop.insets.top = 0
+				backdrop.insets.bottom = p.title.height
 			else
-				windowbackdrop.insets.top = p.title.height
-				windowbackdrop.insets.bottom = 0
+				backdrop.insets.top = p.title.height
+				backdrop.insets.bottom = 0
 			end
 		end
-		g:SetBackdrop(windowbackdrop)
+		g:SetBackdrop(backdrop)
 
 		color = p.background.color
 		g:SetBackdropColor(color.r, color.g, color.b, color.a or 1)
@@ -1048,38 +1035,37 @@ do
 		-- make player's bar fixed.
 		g.showself = Skada.db.profile.showself or p.showself
 
-		g:SetMaxBars(nil, p.snapto)
-
-		g:SetEnableMouse(not p.clickthrough)
+		g:SetClickthrough(p.clickthrough)
 		g:SetClampedToScreen(p.clamped)
 		g:SetSmoothing(p.smoothing)
+		g:SetShown(not p.hidden)
 		LibWindow.SetScale(g, p.scale)
 		g:SortBars()
-		g:SetShown(not p.hidden)
 	end
 
 	function mod:WindowResizing(_, group)
-		if FlyPaper then
+		if FlyPaper and not group.isStretching then
 			local offset = group.win.db.background.borderthickness
-			for _, win in Skada:IterateWindows() do
-				if win.db.display == "bar" and win.bargroup:IsShown() and group.win.db.sticked[win.db.name] then
+			windows = Skada:GetWindows()
+			for i = 1, #windows do
+				local win = windows[i]
+				if win and win.db and win.db.display == "bar" and win.bargroup:IsShown() and group.win.db.sticked and group.win.db.sticked[win.db.name] then
 					FlyPaper.Stick(win.bargroup, group, nil, offset, offset)
 				end
 			end
 		end
-		group:SetMaxBars(nil, group.win.db.snapto)
 	end
 end
 
 local optionsValues = {
 	ORIENTATION = {
 		[1] = L["Left to right"],
-		[3] = L["Right to left"]
+		[2] = L["Right to left"]
 	},
 	TITLEBTNS = {
-		[1] = format("|T%s:22:66|t", format(buttonsTexPath, 1, "_prev")),
-		[2] = format("|T%s:22:66|t", format(buttonsTexPath, 2, "_prev")),
-		[3] = format("|T%s:22:66|t", format(buttonsTexPath, 3, "_prev"))
+		[1] = format("|T%s:22:88|t", format(buttonsTexPath, 1, "_prev")),
+		[2] = format("|T%s:22:88|t", format(buttonsTexPath, 2, "_prev")),
+		[3] = format("|T%s:22:88|t", format(buttonsTexPath, 3, "_prev"))
 	}
 }
 
@@ -1096,12 +1082,11 @@ function mod:AddDisplayOptions(win, options)
 			return db[i[#i]]
 		end,
 		set = function(i, val)
-			db[i[#i]] = val
-			Skada:ApplySettings(db.name)
-			if i[#i] == "barmax" then
-				mod:Wipe(win)
-				win:UpdateDisplay()
+			db[i[#i]] = (type(val) == "boolean" and val or nil) or val
+			if i[#i] == "showtotals" or i[#i] == "classcolortext" or i[#i] == "classcolorleft" or i[#i] == "classcolorright" then
+				win:Wipe(true)
 			end
+			Skada:ApplySettings(win)
 		end,
 		args = {
 			general = {
@@ -1144,25 +1129,17 @@ function mod:AddDisplayOptions(win, options)
 						name = L["Spacing"],
 						desc = format(L["Distance between %s."], L["Bars"]),
 						order = 40,
+						width = "double",
 						min = 0,
 						max = 10,
 						step = 0.01,
 						bigStep = 1
 					},
-					barmax = {
-						type = "range",
-						name = L["Max Bars"],
-						desc = L["The maximum number of bars shown."],
-						order = 50,
-						min = 0,
-						max = 100,
-						step = 1
-					},
 					barorientation = {
 						type = "select",
 						name = L["Bar Orientation"],
 						desc = L["The direction the bars are drawn in."],
-						order = 60,
+						order = 50,
 						width = "double",
 						values = optionsValues.ORIENTATION
 					},
@@ -1170,14 +1147,14 @@ function mod:AddDisplayOptions(win, options)
 						type = "toggle",
 						name = L["Reverse bar growth"],
 						desc = L["Bars will grow up instead of down."],
-						order = 70,
+						order = 60,
 						width = "double"
 					},
 					color = {
 						type = "color",
 						name = L["Bar Color"],
 						desc = L["Choose the default color of the bars."],
-						order = 80,
+						order = 70,
 						hasAlpha = true,
 						get = function()
 							local c = db.barcolor or Skada.windowdefaults.barcolor
@@ -1193,7 +1170,7 @@ function mod:AddDisplayOptions(win, options)
 						type = "color",
 						name = L["Background Color"],
 						desc = L["Choose the background color of the bars."],
-						order = 90,
+						order = 80,
 						hasAlpha = true,
 						get = function()
 							local c = db.barbgcolor or Skada.windowdefaults.barbgcolor
@@ -1209,19 +1186,19 @@ function mod:AddDisplayOptions(win, options)
 						type = "toggle",
 						name = L["Class Colors"],
 						desc = L["When possible, bars will be colored according to player class."],
-						order = 100
+						order = 90
 					},
 					spellschoolcolors = {
 						type = "toggle",
 						name = L["Spell school colors"],
 						desc = L["Use spell school colors where applicable."],
-						order = 110
+						order = 100
 					},
 					classicons = {
 						type = "toggle",
 						name = L["Class Icons"],
 						desc = L["Use class icons where applicable."],
-						order = 120,
+						order = 110,
 						disabled = function()
 							return (db.specicons or db.roleicons)
 						end
@@ -1230,13 +1207,14 @@ function mod:AddDisplayOptions(win, options)
 						type = "toggle",
 						name = L["Role Icons"],
 						desc = L["Use role icons where applicable."],
-						order = 130,
+						order = 120,
 						set = function()
 							db.roleicons = not db.roleicons
 							if db.roleicons and not db.classicons then
 								db.classicons = true
 							end
-							Skada:ReloadSettings()
+							win:Wipe(true)
+							Skada:ApplySettings(win)
 						end,
 						hidden = Skada.Ascension
 					},
@@ -1244,20 +1222,21 @@ function mod:AddDisplayOptions(win, options)
 						type = "toggle",
 						name = L["Spec Icons"],
 						desc = L["Use specialization icons where applicable."],
-						order = 140,
+						order = 130,
 						set = function()
 							db.specicons = not db.specicons
 							if db.specicons and not db.classicons then
 								db.classicons = true
 							end
-							Skada:ReloadSettings()
+							win:Wipe(true)
+							Skada:ApplySettings(win)
 						end,
 						hidden = Skada.Ascension
 					},
 					spark = {
 						type = "toggle",
 						name = L["Show Spark Effect"],
-						order = 150
+						order = 140
 					}
 				}
 			},
@@ -1387,10 +1366,22 @@ function mod:AddDisplayOptions(win, options)
 					showself = {
 						type = "toggle",
 						name = L["Always show self"],
-						desc = L.opt_showself_desc,
+						desc = L["opt_showself_desc"],
 						descStyle = "inline",
 						width = "double",
+						disabled = function() return Skada.db.profile.showself end,
+						hidden = function() return Skada.db.profile.showself end,
 						order = 10
+					},
+					showtotals = {
+						type = "toggle",
+						name = L["Show totals"],
+						desc = L["Shows a extra row with a summary in certain modes."],
+						descStyle = "inline",
+						width = "double",
+						disabled = function() return Skada.db.profile.showtotals end,
+						hidden = function() return Skada.db.profile.showtotals end,
+						order = 20
 					},
 					disablehighlight = {
 						type = "toggle",
@@ -1398,7 +1389,7 @@ function mod:AddDisplayOptions(win, options)
 						desc = L["Hovering a bar won't make it brighter."],
 						descStyle = "inline",
 						width = "double",
-						order = 20
+						order = 30
 					},
 					clickthrough = {
 						type = "toggle",
@@ -1406,7 +1397,7 @@ function mod:AddDisplayOptions(win, options)
 						desc = L["Disables mouse clicks on bars."],
 						descStyle = "inline",
 						width = "double",
-						order = 30
+						order = 40
 					},
 					smoothing = {
 						type = "toggle",
@@ -1414,7 +1405,7 @@ function mod:AddDisplayOptions(win, options)
 						desc = L["Animate bar changes smoothly rather than immediately."],
 						descStyle = "inline",
 						width = "double",
-						order = 40
+						order = 50
 					}
 				}
 			}
@@ -1535,102 +1526,57 @@ function mod:AddDisplayOptions(win, options)
 							}
 						}
 					},
-					border = {
+					font = {
 						type = "group",
-						name = L["Border"],
+						name = L["Font"],
+						desc = format(L["The font used by %s."], L["Title Bar"]),
 						inline = true,
 						order = 70,
 						args = {
-							bordertexture = {
+							font = {
 								type = "select",
-								dialogControl = "LSM30_Border",
-								name = L["Border texture"],
-								desc = L["The texture used for the border of the title."],
-								order = 10,
-								width = "double",
-								values = Skada:MediaList("border")
+								name = L["Font"],
+								desc = format(L["The font used by %s."], L["Title Bar"]),
+								dialogControl = "LSM30_Font",
+								values = Skada:MediaList("font"),
+								order = 10
 							},
-							bordercolor = {
-								type = "color",
-								name = L["Border Color"],
-								desc = L["The color used for the border."],
-								hasAlpha = true,
+							fontflags = {
+								type = "select",
+								name = L["Font Outline"],
+								desc = L["Sets the font outline."],
 								order = 20,
+								values = FONT_FLAGS
+							},
+							fontsize = {
+								type = "range",
+								name = L["Font Size"],
+								desc = format(L["The font size of %s."], L["Title Bar"]),
+								order = 30,
+								min = 5,
+								max = 32,
+								step = 1
+							},
+							textcolor = {
+								type = "color",
+								name = L["Text Color"],
+								desc = format(L["The text color of %s."], L["Title Bar"]),
+								order = 40,
+								hasAlpha = true,
 								get = function()
-									local c = db.title.bordercolor or Skada.windowdefaults.title.bordercolor
+									local c = db.title.textcolor or Skada.windowdefaults.title.textcolor
 									return c.r, c.g, c.b, c.a or 1
 								end,
 								set = function(_, r, g, b, a)
-									db.title.bordercolor = db.title.bordercolor or {}
-									db.title.bordercolor.r = r
-									db.title.bordercolor.g = g
-									db.title.bordercolor.b = b
-									db.title.bordercolor.a = a
+									db.title.textcolor = db.title.textcolor or {}
+									db.title.textcolor.r = r
+									db.title.textcolor.g = g
+									db.title.textcolor.b = b
+									db.title.textcolor.a = a
 									Skada:ApplySettings(db.name)
 								end
-							},
-							borderthickness = {
-								type = "range",
-								name = L["Border Thickness"],
-								desc = L["The thickness of the borders."],
-								order = 30,
-								min = 0,
-								max = 50,
-								step = 0.01,
-								bigStep = 0.1
 							}
 						}
-					}
-				}
-			},
-			text = {
-				type = "group",
-				name = L["Text"],
-				desc = format(L["Text options for %s."], L["Title Bar"]),
-				order = 20,
-				args = {
-					font = {
-						type = "select",
-						name = L["Font"],
-						desc = format(L["The font used by %s."], L["Title Bar"]),
-						dialogControl = "LSM30_Font",
-						values = Skada:MediaList("font"),
-						order = 10
-					},
-					fontflags = {
-						type = "select",
-						name = L["Font Outline"],
-						desc = L["Sets the font outline."],
-						order = 20,
-						values = FONT_FLAGS
-					},
-					fontsize = {
-						type = "range",
-						name = L["Font Size"],
-						desc = format(L["The font size of %s."], L["Title Bar"]),
-						order = 30,
-						min = 5,
-						max = 32,
-						step = 1
-					},
-					textcolor = {
-						type = "color",
-						name = L["Text Color"],
-						desc = format(L["The text color of %s."], L["Title Bar"]),
-						order = 40,
-						hasAlpha = true,
-						get = function()
-							local c = db.title.textcolor or Skada.windowdefaults.title.textcolor
-							return c.r, c.g, c.b, c.a or 1
-						end,
-						set = function(_, r, g, b, a)
-							db.title.textcolor = db.title.textcolor or {}
-							db.title.textcolor.r = r
-							db.title.textcolor.g = g
-							db.title.textcolor.b = b
-							db.title.textcolor.a = a
-							Skada:ApplySettings(db.name)
-						end
 					}
 				}
 			},
@@ -1638,7 +1584,7 @@ function mod:AddDisplayOptions(win, options)
 				type = "group",
 				name = L["Buttons"],
 				desc = format(L["Options for %s."], L["Buttons"]),
-				order = 30,
+				order = 20,
 				width = "double",
 				args = {
 					buttons = {
@@ -1657,19 +1603,19 @@ function mod:AddDisplayOptions(win, options)
 							menu = {
 								type = "toggle",
 								name = L["Configure"],
-								desc = L.btn_config_desc,
+								desc = L["btn_config_desc"],
 								order = 10
 							},
 							reset = {
 								type = "toggle",
-								name = RESET,
-								desc = L.btn_reset_desc,
+								name = L["Reset"],
+								desc = L["btn_reset_desc"],
 								order = 20
 							},
 							segment = {
 								type = "toggle",
 								name = L["Segment"],
-								desc = L["Jump to a specific segment."],
+								desc = L["btn_segment_desc"],
 								order = 30
 							},
 							mode = {
@@ -1681,13 +1627,13 @@ function mod:AddDisplayOptions(win, options)
 							report = {
 								type = "toggle",
 								name = L["Report"],
-								desc = L.btn_report_desc,
+								desc = L["btn_report_desc"],
 								order = 50
 							},
 							stop = {
 								type = "toggle",
 								name = L["Stop"],
-								desc = L.btn_stop_desc,
+								desc = L["btn_stop_desc"],
 								order = 60
 							}
 						}
@@ -1695,7 +1641,6 @@ function mod:AddDisplayOptions(win, options)
 					style = {
 						type = "multiselect",
 						name = L["Buttons Style"],
-						width = "half",
 						order = 20,
 						get = function(_, key)
 							return (db.title.toolbar == key)
@@ -1842,6 +1787,7 @@ do
 			local applytheme, applywindow = nil, nil
 			local savetheme, savewindow = nil, nil
 			local deletetheme = nil
+			local skipped = {"name", "sticked", "x", "y", "point", "modeincombat", "set", "wipemode", "returnaftercombat"}
 			local list = {}
 
 			local themes = {
@@ -1866,9 +1812,6 @@ do
 						font = "Accidental Presidency",
 						fontsize = 13,
 						texture = "Armory",
-						bordercolor = {r = 0, g = 0, b = 0, a = 1},
-						bordertexture = "None",
-						borderthickness = 2,
 						color = {r = 0.3, g = 0.3, b = 0.3, a = 1},
 						fontflags = ""
 					},
@@ -1910,9 +1853,6 @@ do
 						font = "Accidental Presidency",
 						fontsize = 12,
 						texture = "Armory",
-						bordercolor = {r = 0, g = 0, b = 0, a = 1},
-						bordertexture = "None",
-						borderthickness = 0,
 						color = {r = 0.6, g = 0.6, b = 0.8, a = 1},
 						fontflags = ""
 					},
@@ -1954,9 +1894,6 @@ do
 						font = "ABF",
 						fontsize = 12,
 						texture = "Aluminium",
-						bordercolor = {r = 0, g = 0, b = 0, a = 1},
-						bordertexture = "None",
-						borderthickness = 0,
 						color = {r = 0.6, g = 0.6, b = 0.8, a = 1},
 						fontflags = ""
 					},
@@ -1996,9 +1933,6 @@ do
 						font = "Arial Narrow",
 						fontsize = 12,
 						texture = "Gloss",
-						bordercolor = {r = 0, g = 0, b = 0, a = 1},
-						bordertexture = "None",
-						borderthickness = 0,
 						color = {r = 1, g = 0, b = 0, a = 0.75},
 						fontflags = ""
 					},
@@ -2042,9 +1976,6 @@ do
 						font = "Friz Quadrata TT",
 						fontsize = 10,
 						texture = "Blizzard",
-						bordercolor = {r = 1, g = 0.75, b = 0, a = 1},
-						bordertexture = "Blizzard Dialog",
-						borderthickness = 1,
 						color = {r = 0.2, g = 0.2, b = 0.2, a = 0},
 						fontflags = ""
 					},
@@ -2084,12 +2015,16 @@ do
 								set = function(_, val) applytheme = val end,
 								values = function()
 									wipe(list)
-									for _, theme in ipairs(themes) do
-										list[theme.name] = theme.name
+									for i = 1, #themes do
+										local theme = themes[i]
+										if theme then
+											list[theme.name] = theme.name
+										end
 									end
 									if Skada.db.global.themes then
-										for _, theme in ipairs(Skada.db.global.themes) do
-											if theme.name then
+										for i = 1, #Skada.db.global.themes do
+											local theme = Skada.db.global.themes[i]
+											if theme and theme.name then
 												list[theme.name] = theme.name
 											end
 										end
@@ -2105,8 +2040,12 @@ do
 								set = function(_, val) applywindow = val end,
 								values = function()
 									wipe(list)
-									for _, win in Skada:IterateWindows() do
-										list[win.db.name] = win.db.name
+									windows = Skada:GetWindows()
+									for i = 1, #windows do
+										local win = windows[i]
+										if win and win.db and win.db.display == "bar" then
+											list[win.db.name] = win.db.name
+										end
 									end
 									return list
 								end
@@ -2122,15 +2061,16 @@ do
 								func = function()
 									if applywindow and applytheme then
 										local thetheme = nil
-										for i, theme in ipairs(themes) do
-											if theme.name == applytheme then
-												thetheme = theme
+										for i = 1, #themes do
+											if themes[i] and themes[i].name == applytheme then
+												thetheme = themes[i]
 												break
 											end
 										end
 										if Skada.db.global.themes then
-											for i, theme in ipairs(Skada.db.global.themes) do
-												if theme.name == applytheme then
+											for i = 1, #Skada.db.global.themes do
+												local theme = Skada.db.global.themes[i]
+												if theme and theme.name == applytheme then
 													thetheme = theme
 													break
 												end
@@ -2138,9 +2078,11 @@ do
 										end
 
 										if thetheme then
-											for _, win in Skada:IterateWindows() do
-												if win.db.name == applywindow then
-													Skada.tCopy(win.db, thetheme)
+											windows = Skada:GetWindows()
+											for i = 1, #windows do
+												local win = windows[i]
+												if win and win.db and win.db.name == applywindow then
+													Skada.tCopy(win.db, thetheme, skipped)
 													Skada:ApplySettings()
 													Skada:Print(L["Theme applied!"])
 												end
@@ -2166,8 +2108,12 @@ do
 								set = function(_, val) savewindow = val end,
 								values = function()
 									wipe(list)
-									for _, win in Skada:IterateWindows() do
-										list[win.db.name] = win.db.name
+									windows = Skada:GetWindows()
+									for i = 1, #windows do
+										local win = windows[i]
+										if win and win.db and win.db.display == "bar" then
+											list[win.db.name] = win.db.name
+										end
 									end
 									return list
 								end
@@ -2187,11 +2133,13 @@ do
 								order = 30,
 								disabled = function() return (savetheme == nil or savewindow == nil) end,
 								func = function()
-									for _, win in Skada:IterateWindows() do
-										if win.db.name == savewindow then
+									windows = Skada:GetWindows()
+									for i = 1, #windows do
+										local win = windows[i]
+										if win and win.db and win.db.name == savewindow then
 											Skada.db.global.themes = Skada.db.global.themes or {}
 											local theme = {}
-											Skada.tCopy(theme, win.db, "name", "sticked", "x", "y", "point", "modeincombat", "set", "wipemode", "returnaftercombat")
+											Skada.tCopy(theme, win.db, skipped)
 											theme.name = savetheme or win.db.name
 											Skada.db.global.themes[#Skada.db.global.themes + 1] = theme
 										end
@@ -2216,8 +2164,9 @@ do
 								values = function()
 									wipe(list)
 									if Skada.db.global.themes then
-										for i, theme in ipairs(Skada.db.global.themes) do
-											if theme.name then
+										for i = 1, #Skada.db.global.themes do
+											local theme = Skada.db.global.themes[i]
+											if theme and theme.name then
 												list[theme.name] = theme.name
 											end
 										end
@@ -2233,8 +2182,9 @@ do
 								confirm = function() return L["Are you sure you want to delete this theme?"] end,
 								func = function()
 									if Skada.db.global.themes then
-										for i, theme in ipairs(Skada.db.global.themes) do
-											if theme.name == deletetheme then
+										for i = 1, #Skada.db.global.themes do
+											local theme = Skada.db.global.themes[i]
+											if theme and theme.name == deletetheme then
 												tremove(Skada.db.global.themes, i)
 												break
 											end
@@ -2272,7 +2222,7 @@ do
 							speed = {
 								type = "range",
 								name = L["Wheel Speed"],
-								desc = L.opt_wheelspeed_desc,
+								desc = L["opt_wheelspeed_desc"],
 								set = function(_, val)
 									mod.db.speed = val
 									mod:SetScrollSpeed(val)
@@ -2355,10 +2305,10 @@ do
 
 	function mod:OnInitialize()
 		self.name = L["Bar display"]
-		self.description = L.mod_bar_desc
+		self.description = L["mod_bar_desc"]
 		Skada:AddDisplaySystem("bar", self)
 
-		self.db = Skada.db.profile.scroll or {speed = 2, icon = true, button = "MiddleButton"}
+		self.db = Skada.db.profile.scroll
 		if not self.db then
 			self.db = {speed = 2, icon = true, button = "MiddleButton"}
 			Skada.db.profile.scroll = self.db
@@ -2367,10 +2317,18 @@ do
 		Skada.options.args.themeoptions = GetThemeOptions()
 		Skada.options.args.themeoptions.order = 960
 
-		Skada.options.args.scrolloptions = GetScrollOptions()
-		Skada.options.args.scrolloptions.order = 970
+		Skada.options.args.tweaks.args.advanced.args.scroll = GetScrollOptions()
+		Skada.options.args.tweaks.args.advanced.args.scroll.order = 980
 
 		self:SetScrollSpeed(self.db.speed)
+
+		if not spellschools then
+			spellschools = Skada.spellschools
+			classcolors = Skada.classcolors
+			classcoords = Skada.classcoords
+			rolecoords = Skada.rolecoords
+			speccoords = Skada.speccoords
+		end
 	end
 end
 

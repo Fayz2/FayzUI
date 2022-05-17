@@ -2,7 +2,7 @@ local Skada = Skada
 
 local L = LibStub("AceLocale-3.0"):GetLocale("Skada")
 
-local select, pairs, ipairs = select, pairs, ipairs
+local select, pairs = select, pairs
 local tostring, tonumber, format = tostring, tonumber, string.format
 local setmetatable, getmetatable, wipe, band = setmetatable, getmetatable, wipe, bit.band
 local print = print
@@ -50,16 +50,23 @@ function Skada:RegisterClasses()
 	self.classcolors.PET = {r = 0.3, g = 0.4, b = 0.5, colorStr = "ff4c0566"}
 	self.classcolors.PLAYER = {r = 0.94117, g = 0, b = 0.0196, colorStr = "fff00005"}
 	self.classcolors.UNKNOWN = {r = 0.2, g = 0.2, b = 0.2, colorStr = "ff333333"}
-	-- arena class colors
-	self.classcolors.ARENA_GOLD = {r = 1, g = 0.82, b = 0, colorStr = "ffffd100"}
-	self.classcolors.ARENA_GREEN = {r = 0.1, g = 1, b = 0.1, colorStr = "ff19ff19"}
-	-- purple color instead of green for color blind mode.
-	if GetCVar("colorblindMode") == "1" then
-		self.classcolors.ARENA_GREEN.r = 0.686
-		self.classcolors.ARENA_GREEN.g = 0.384
-		self.classcolors.ARENA_GREEN.b = 1
-		self.classcolors.ARENA_GREEN.colorStr = "ffae61ff"
-	end
+
+	setmetatable(self.classcolors, {__call = function(t, class, arg)
+		local color = HIGHLIGHT_FONT_COLOR
+		if class and t[class] then
+			color = t[class]
+			-- using a custom color?
+			if Skada.db.profile.usecustomcolors and Skada.db.profile.customcolors and Skada.db.profile.customcolors[class] then
+				color = Skada.db.profile.customcolors[class]
+			end
+		end
+		-- missing colorStr?
+		if not color.colorStr then
+			color.colorStr = Skada.RGBPercToHex(color.r, color.g, color.b, true)
+		end
+
+		return (arg == nil) and color or (type(arg) == "string") and format("|c%s%s|r", color.colorStr, arg) or color.colorStr
+	end})
 
 	-- set classes icon file & Skada custom classes.
 	if self.AscensionCoA then
@@ -88,22 +95,31 @@ function Skada:RegisterClasses()
 		end
 	end
 
+	-- common metatable for coordinates tables.
+	local coords_mt = {__call = function(t, key)
+		if key and t[key] then
+			return t[key][1], t[key][2], t[key][3], t[key][4]
+		end
+		return 0, 1, 0, 1
+	end}
+	setmetatable(self.classcoords, coords_mt)
+
 	-- we ignore roles & specs on Project Ascension since players
 	-- have a custom module to set their own colors & icons.
 	if not self.Ascension and not self.AscensionCoA then
 		-- role icon file and texture coordinates
 		self.roleicons = [[Interface\AddOns\Skada\Media\Textures\icon-roles]]
-		self.rolecoords = {
+		self.rolecoords = setmetatable({
 			LEADER = {0, 0.25, 0, 1},
 			DAMAGER = {0.25, 0.5, 0, 1},
 			TANK = {0.5, 0.75, 0, 1},
 			HEALER = {0.75, 1, 0, 1},
 			NONE = ""
-		}
+		}, coords_mt)
 
 		-- specialization icons
 		self.specicons = [[Interface\AddOns\Skada\Media\Textures\icon-specs]]
-		self.speccoords = {
+		self.speccoords = setmetatable({
 			[62] = {0.25, 0.375, 0.25, 0.5}, --> Mage: Arcane
 			[63] = {0.375, 0.5, 0.25, 0.5}, --> Mage: Fire
 			[64] = {0.5, 0.625, 0.25, 0.5}, --> Mage: Frost
@@ -135,7 +151,101 @@ function Skada:RegisterClasses()
 			[265] = {0.125, 0.25, 0.75, 1}, --> Warlock: Affliction
 			[266] = {0.25, 0.375, 0.75, 1}, --> Warlock: Demonology
 			[267] = {0.375, 0.5, 0.75, 1} --> Warlock: Destruction
+		}, coords_mt)
+	end
+
+	-- customize class colors
+	if not self.Ascension or not self.AscensionCoA then
+		local disabled = function()
+			return not self.db.profile.usecustomcolors
+		end
+
+		local colorsOpt = {
+			type = "group",
+			name = L["Colors"],
+			desc = format(L["Options for %s."], L["Colors"]),
+			order = 1000,
+			get = function(i)
+				local color = self.classcolors[i[#i]]
+				if self.db.profile.customcolors and self.db.profile.customcolors[i[#i]] then
+					color = self.db.profile.customcolors[i[#i]]
+				end
+				return color.r, color.g, color.b
+			end,
+			set = function(i, r, g, b)
+				local class = i[#i]
+				self.db.profile.customcolors = self.db.profile.customcolors or {}
+				self.db.profile.customcolors[class] = self.db.profile.customcolors[class] or {}
+				self.db.profile.customcolors[class].r = r
+				self.db.profile.customcolors[class].g = g
+				self.db.profile.customcolors[class].b = b
+				self.db.profile.customcolors[class].colorStr = self.RGBPercToHex(r, g, b, true)
+			end,
+			args = {
+				enable = {
+					type = "toggle",
+					name = L["Enable"],
+					width = "double",
+					order = 10,
+					get = function()
+						return self.db.profile.usecustomcolors
+					end,
+					set = function(_, val)
+						if val then
+							self.db.profile.usecustomcolors = true
+						else
+							self.db.profile.usecustomcolors = nil
+							self.db.profile.customcolors = nil -- free it
+						end
+					end
+				},
+				class = {
+					type = "group",
+					name = L["Class Colors"],
+					order = 20,
+					hidden = disabled,
+					disabled = disabled,
+					args = {}
+				},
+				custom = {
+					type = "group",
+					name = L["Custom Colors"],
+					order = 30,
+					hidden = disabled,
+					disabled = disabled,
+					args = {}
+				},
+				reset = {
+					type = "execute",
+					name = L["Reset"],
+					width = "double",
+					order = 90,
+					disabled = disabled,
+					confirm = function() return L["Are you sure you want to reset all colors?"] end,
+					func = function()
+						self.db.profile.customcolors = wipe(self.db.profile.customcolors or {})
+					end
+				}
+			}
 		}
+
+		for class, data in pairs(self.classcolors) do
+			if self.validclass[class] then
+				colorsOpt.args.class.args[class] = {
+					type = "color",
+					name = L[class],
+					desc = format(L["Color for %s."], L[class])
+				}
+			else
+				colorsOpt.args.custom.args[class] = {
+					type = "color",
+					name = L[class],
+					desc = format(L["Color for %s."], L[class])
+				}
+			end
+		end
+
+		self.options.args.tweaks.args.advanced.args.colors = colorsOpt
 	end
 end
 
@@ -146,8 +256,7 @@ function Skada:RegisterSchools()
 	-- handles adding spell schools
 	local function add_school(key, name, r, g, b)
 		if key and name and not self.spellschools[key] then
-			local newname = name:match("%((.+)%)")
-			self.spellschools[key] = {r = r or 1, g = g or 1, b = b or 1, name = newname or name}
+			self.spellschools[key] = {r = r or 1, g = g or 1, b = b or 1, name = name:match("%((.+)%)") or name}
 		end
 	end
 
@@ -172,6 +281,13 @@ function Skada:RegisterSchools()
 	-- Multiple Schools (can be extended if needed)
 	add_school(SCHOOL_FIRE + SCHOOL_FROST, STRING_SCHOOL_FROSTFIRE, 0.5, 1, 1) -- Frostfire
 	add_school(SCHOOL_PHYSICAL + SCHOOL_SHADOW, STRING_SCHOOL_SHADOWSTRIKE, 0.5, 0.5, 1) -- Shadowstrike
+
+	setmetatable(self.spellschools, {__call = function(t, school)
+		if school and t[school] then
+			return t[school].name, t[school].r, t[school].g, t[school].b
+		end
+		return L["Unknown"], 1, 1, 1
+	end})
 end
 
 -------------------------------------------------------------------------------
@@ -237,7 +353,10 @@ do
 		local id = self.GetCreatureId(guid)
 
 		if LBI.BossIDs[id] or creatureToFight[id] or creatureToBoss[id] then
-			id = creatureToBoss[id] or id -- should fix id?
+			-- should fix id?
+			if creatureToBoss[id] and creatureToBoss[id] ~= true then
+				id = creatureToBoss[id]
+			end
 
 			-- should fix name?
 			if creatureToFight[id] and name ~= creatureToFight[id] then
@@ -268,16 +387,18 @@ function Skada.unitClass(guid, flag, set, db, name)
 	set = set or Skada.current
 	if set then
 		-- an existing player
-		for _, p in ipairs(set.players) do
-			if p.id == guid then
+		for i = 1, #set.players do
+			local p = set.players[i]
+			if p and p.id == guid then
 				return p.class, p.role, p.spec
-			elseif name and p.name == name and p.class and Skada.validclass[p.class] then
+			elseif p and name and p.name == name and p.class and Skada.validclass[p.class] then
 				return p.class, p.role, p.spec
 			end
 		end
 		if set.enemies then
-			for _, e in ipairs(set.enemies) do
-				if (e.id == guid or e.name == guid) and e.class then
+			for i = 1, #set.enemies do
+				local e = set.enemies[i]
+				if e and ((e.id == guid or e.name == guid)) and e.class then
 					return e.class
 				end
 			end
@@ -310,8 +431,6 @@ end
 -- spell functions
 
 do
-	local GetSpellInfo, GetSpellLink = GetSpellInfo, GetSpellLink
-
 	local customSpells = {
 		[3] = {ACTION_ENVIRONMENTAL_DAMAGE_FALLING, [[Interface\Icons\ability_rogue_quickrecovery]]},
 		[4] = {ACTION_ENVIRONMENTAL_DAMAGE_DROWNING, [[Interface\Icons\spell_shadow_demonbreath]]},
@@ -331,7 +450,7 @@ do
 				if spellid == 75 then
 					res3 = [[Interface\Icons\INV_Weapon_Bow_07]]
 				elseif spellid == 6603 then
-					res1, res3 = L.Melee, [[Interface\Icons\INV_Sword_04]]
+					res1, res3 = L["Melee"], [[Interface\Icons\INV_Sword_04]]
 				end
 			end
 		end
@@ -349,7 +468,6 @@ end
 -- test mode
 
 do
-	local unpack = unpack
 	local random = math.random
 	local IsGroupInCombat = Skada.IsGroupInCombat
 	local InCombatLockdown = InCombatLockdown
@@ -422,7 +540,7 @@ do
 
 		local players = FakePlayers()
 		for i = 1, #players do
-			local name, class, role, spec = unpack(players[i])
+			local name, class, role, spec = players[i][1], players[i][2], players[i][3], players[i][4]
 			local damage, heal, absorb = 0, 0, 0
 
 			if role == "TANK" then
@@ -443,7 +561,7 @@ do
 				heal = random(250, 1500)
 			end
 
-			tinsert(fakeSet.players, {
+			fakeSet.players[#fakeSet.players + 1] = {
 				id = name,
 				name = name,
 				class = class,
@@ -452,7 +570,7 @@ do
 				damage = damage,
 				heal = heal,
 				absorb = absorb
-			})
+			}
 
 			fakeSet.damage = fakeSet.damage + damage
 			fakeSet.heal = fakeSet.heal + heal
@@ -463,38 +581,37 @@ do
 	end
 
 	local function RandomizeFakeData(set, coef)
-		for _, player in ipairs(set.players) do
-			if getmetatable(player) ~= playerPrototype then
-				playerPrototype:Bind(player, set)
-			end
+		for i = 1, #set.players do
+			local player = playerPrototype:Bind(set.players[i], set)
+			if player then
+				local damage, heal, absorb = 0, 0, 0
 
-			local damage, heal, absorb = 0, 0, 0
-
-			if player.role == "HEALER" then
-				damage = coef * random(0, 1500)
-				if player.spec == 256 then
+				if player.role == "HEALER" then
+					damage = coef * random(0, 1500)
+					if player.spec == 256 then
+						heal = coef * random(500, 1500)
+						absorb = coef * random(2500, 20000)
+					else
+						heal = coef * random(2500, 15000)
+						absorb = coef * random(0, 150)
+					end
+				elseif player.role == "TANK" then
+					damage = coef * random(1000, 10000)
 					heal = coef * random(500, 1500)
-					absorb = coef * random(2500, 20000)
+					absorb = coef * random(1000, 1500)
 				else
-					heal = coef * random(2500, 15000)
-					absorb = coef * random(0, 150)
+					damage = coef * random(8000, 18000)
+					heal = coef * random(150, 1500)
 				end
-			elseif player.role == "TANK" then
-				damage = coef * random(1000, 10000)
-				heal = coef * random(500, 1500)
-				absorb = coef * random(1000, 1500)
-			else
-				damage = coef * random(8000, 18000)
-				heal = coef * random(150, 1500)
+
+				player.damage = (player.damage or 0) + damage
+				player.heal = (player.heal or 0) + heal
+				player.absorb = (player.absorb or 0) + absorb
+
+				set.damage = set.damage + damage
+				set.heal = set.heal + heal
+				set.absorb = set.absorb + absorb
 			end
-
-			player.damage = (player.damage or 0) + damage
-			player.heal = (player.heal or 0) + heal
-			player.absorb = (player.absorb or 0) + absorb
-
-			set.damage = set.damage + damage
-			set.heal = set.heal + heal
-			set.absorb = set.absorb + absorb
 		end
 	end
 
@@ -651,11 +768,11 @@ do
 					self.db.profile.toast[i[#i]] = val
 					LibToast.config[i[#i]] = val
 				end,
-				order = 10000,
+				order = 990,
 				args = {
 					toastdesc = {
 						type = "description",
-						name = L.opt_toast_desc,
+						name = L["opt_toast_desc"],
 						fontSize = "medium",
 						width = "full",
 						order = 0
@@ -733,6 +850,149 @@ do
 end
 
 -------------------------------------------------------------------------------
+-- Total segment stuff!
+
+do
+	local total_opt = nil
+
+	function Skada:GetTotalOptions()
+		self.GetTotalOptions = nil -- remove it
+
+		if not total_opt then
+			local values = {al = 0x10, rb = 0x01, rt = 0x02, db = 0x04, dt = 0x08}
+
+			local disabled = function()
+				return band(self.db.profile.totalflag, values.al) ~= 0
+			end
+
+			total_opt = {
+				type = "group",
+				name = L["Total Segment"],
+				desc = format(L["Options for %s."], L["Total Segment"]),
+				order = 970,
+				args = {
+					collection = {
+						type = "group",
+						name = L["Data Collection"],
+						inline = true,
+						order = 10,
+						get = function(i)
+							return (band(self.db.profile.totalflag, values[i[#i]]) ~= 0)
+						end,
+						set = function(i, val)
+							local v = values[i[#i]]
+							if val and band(self.db.profile.totalflag, v) == 0 then
+								self.db.profile.totalflag = self.db.profile.totalflag + v
+							elseif not val and band(self.db.profile.totalflag, v) ~= 0 then
+								self.db.profile.totalflag = self.db.profile.totalflag - v
+							end
+						end,
+						args = {
+							al = {
+								type = "toggle",
+								name = L["All Segments"],
+								desc = L["opt_tweaks_total_all_desc"],
+								width = "full",
+								order = 10
+							},
+							rb = {
+								type = "toggle",
+								name = L["Raid Bosses"],
+								desc = format(L["opt_tweaks_total_fmt_desc"], L["Raid Bosses"]),
+								order = 20,
+								disabled = disabled
+							},
+							rt = {
+								type = "toggle",
+								name = L["Raid Trash"],
+								desc = format(L["opt_tweaks_total_fmt_desc"], L["Raid Trash"]),
+								order = 30,
+								disabled = disabled
+							},
+							db = {
+								type = "toggle",
+								name = L["Dungeon Bosses"],
+								desc = format(L["opt_tweaks_total_fmt_desc"], L["Dungeon Bosses"]),
+								order = 40,
+								disabled = disabled
+							},
+							dt = {
+								type = "toggle",
+								name = L["Dungeon Trash"],
+								desc = format(L["opt_tweaks_total_fmt_desc"], L["Dungeon Trash"]),
+								order = 50,
+								disabled = disabled
+							}
+						}
+					},
+					totalidc = {
+						type = "toggle",
+						name = L["Detailed total segment"],
+						desc = L["opt_tweaks_total_full_desc"],
+						order = 20
+					}
+				}
+			}
+		end
+
+		return total_opt
+	end
+
+	function Skada:NoTotalClick(set, mode)
+		return (not self.db.profile.totalidc and set == "total" and type(mode) == "table" and mode.nototal == true)
+	end
+
+	function Skada:CanRecordTotal(set)
+		if self.total and set then
+			-- just in case
+			if not self.db.profile.totalflag then
+				self.db.profile.totalflag = 0x10
+			end
+
+			-- raid bosses - 0x01
+			if band(self.db.profile.totalflag, 0x01) ~= 0 then
+				if set.type == "raid" and set.gotboss then
+					if set.time >= self.db.profile.minsetlength then
+						return true
+					end
+				end
+			end
+
+			-- raid trash - 0x02
+			if band(self.db.profile.totalflag, 0x02) ~= 0 then
+				if set.type == "raid" and not set.gotboss then
+					return true
+				end
+			end
+
+			-- dungeon boss - 0x04
+			if band(self.db.profile.totalflag, 0x04) ~= 0 then
+				if set.type == "party" and self.db.profile.gotboss then
+					return true
+				end
+			end
+
+			-- dungeon trash - 0x08
+			if band(self.db.profile.totalflag, 0x08) ~= 0 then
+				if set.type == "party" and not self.db.profile.gotboss then
+					return true
+				end
+			end
+
+			-- any combat - 0x10
+			if band(self.db.profile.totalflag, 0x10) ~= 0 then
+				return true
+			end
+
+			-- battlegrouns/arenas or nothing
+			return (set.type == "pvp" or set.type == "arena")
+		end
+
+		return false
+	end
+end
+
+-------------------------------------------------------------------------------
 -- units fix function.
 --
 -- on certain servers, certain spells are not assigned properly and
@@ -776,7 +1036,9 @@ do
 
 	function Skada:FixUnit(spellid, guid, name, flag)
 		if spellid and guid and queued_units and queued_units[spellid] and queued_units[spellid][guid] then
-			return queued_units[spellid][guid].id or guid, queued_units[spellid][guid].name or name, queued_units[spellid][guid].flag or flag
+			flag = queued_units[spellid][guid].flag or flag
+			name = queued_units[spellid][guid].name or name
+			guid = queued_units[spellid][guid].id or guid
 		end
 		return guid, name, flag
 	end
@@ -796,5 +1058,32 @@ do
 
 	function Skada:ClearQueueUnits()
 		T.free("Skada_QueuedUnits", queued_units, nil, del, true)
+	end
+end
+
+-------------------------------------------------------------------------------
+-- frame borders
+
+function Skada:ApplyBorder(frame, texture, color, thickness, padtop, padbottom, padleft, padright)
+	if not frame.borderFrame then
+		frame.borderFrame = CreateFrame("Frame", "$parentBorder", frame)
+		frame.borderFrame:SetFrameLevel(frame:GetFrameLevel() - 1)
+	end
+
+	padtop = padtop or 0
+	padbottom = padbottom or padtop
+	padleft = padleft or padtop
+	padright = padright or padtop
+
+	frame.borderFrame:SetPoint("TOPLEFT", frame, -thickness - padleft, thickness + padtop)
+	frame.borderFrame:SetPoint("BOTTOMRIGHT", frame, thickness + padright, -thickness - padbottom)
+
+	local borderbackdrop = T.get("Skada_BorderBackdrop")
+	borderbackdrop.edgeFile = (texture and thickness > 0) and self:MediaFetch("border", texture) or nil
+	borderbackdrop.edgeSize = thickness
+	frame.borderFrame:SetBackdrop(borderbackdrop)
+	T.free("Skada_BorderBackdrop", borderbackdrop)
+	if color then
+		frame.borderFrame:SetBackdropBorderColor(color.r, color.g, color.b, color.a)
 	end
 end

@@ -12,11 +12,12 @@ local CloseDropDownMenus = CloseDropDownMenus
 
 local WrapTextInColorCode = Skada.WrapTextInColorCode
 local RGBPercToHex = Skada.RGBPercToHex
+local classcolors = nil
 
 local FONT_FLAGS = Skada.fontFlags
 if not FONT_FLAGS then
 	FONT_FLAGS = {
-		[""] = L.None,
+		[""] = L["None"],
 		["OUTLINE"] = L["Outline"],
 		["THICKOUTLINE"] = L["Thick outline"],
 		["MONOCHROME"] = L["Monochrome"],
@@ -25,27 +26,37 @@ if not FONT_FLAGS then
 	Skada.fontFlags = FONT_FLAGS
 end
 
+local function sortFunc(a, b)
+	if not a or a.value == nil then
+		return false
+	elseif not b or b.value == nil then
+		return true
+	elseif a.value < b.value then
+		return false
+	elseif a.value > b.value then
+		return true
+	elseif not a.label then
+		return false
+	elseif not b.label then
+		return true
+	else
+		return a.label > b.label
+	end
+end
+
 local function sortDataset(win)
-	tsort(win.dataset, function(a, b)
-		if not a or a.value == nil then
-			return false
-		elseif not b or b.value == nil then
-			return true
-		else
-			return a.value > b.value
-		end
-	end)
+	tsort(win.dataset, sortFunc)
 end
 
 local function formatLabel(win, data)
 	if win.db.isusingclasscolors and data.class then
-		return WrapTextInColorCode(data.text or data.label or L.Unknown, Skada.classcolors[data.class].colorStr)
+		return classcolors(data.class, data.text or data.label or L["Unknown"])
 	elseif data.color and data.color.colorStr then
-		return WrapTextInColorCode(data.text or data.label or L.Unknown, data.color.colorStr)
+		return format("|c%s%s|r", data.color.colorStr, data.text or data.label or L["Unknown"])
 	elseif data.color then
-		return WrapTextInColorCode(data.text or data.label or L.Unknown, RGBPercToHex(data.color.r or 1, data.color.g or 1, data.color.b or 1, data.color.a or 1, true))
+		return WrapTextInColorCode(data.text or data.label or L["Unknown"], RGBPercToHex(data.color.r or 1, data.color.g or 1, data.color.b or 1, true))
 	else
-		return data.text or data.label or L.Unknown
+		return data.text or data.label or L["Unknown"]
 	end
 end
 
@@ -81,8 +92,9 @@ local function tooltipHandler(win, tooltip)
 	if #win.dataset > 0 then
 		tooltip:AddLine(" ")
 		local n = 0 -- used to fix spots starting from 2
-		for i, data in ipairs(win.dataset) do
-			if data.id and not data.ignore and i < 30 then
+		for i = 1, #win.dataset do
+			local data = win.dataset[i]
+			if data and data.id and not data.ignore and i < 30 then
 				n = n + 1
 				local label = formatLabel(win, data)
 				local value = formatValue(win, data)
@@ -92,6 +104,8 @@ local function tooltipHandler(win, tooltip)
 				end
 
 				tooltip:AddDoubleLine(label or "", value or "", color.r, color.g, color.b, color.r, color.g, color.b)
+			elseif i >= 30 then
+				break
 			end
 		end
 	end
@@ -107,6 +121,10 @@ end
 local ttactive = false
 
 function mod:Create(win, isnew)
+	if not classcolors then
+		classcolors = Skada.classcolors
+	end
+
 	-- Optional internal frame
 	if not win.frame then
 		win.frame = CreateFrame("Frame", win.db.name .. "BrokerFrame", UIParent)
@@ -242,12 +260,7 @@ function mod:ApplySettings(win)
 			db.background.color.a
 		)
 
-		Skada:ApplyBorder(
-			win.frame,
-			db.background.bordertexture,
-			db.background.bordercolor,
-			db.background.borderthickness
-		)
+		Skada:ApplyBorder(win.frame, db.background.bordertexture, db.background.bordercolor, db.background.borderthickness, db.background.borderinsets)
 
 		local color = db.textcolor or {r = 1, g = 1, b = 1, a = 1}
 		title:SetTextColor(color.r, color.g, color.b, color.a)
@@ -290,7 +303,7 @@ function mod:AddDisplayOptions(win, options)
 			useframe = {
 				type = "toggle",
 				name = L["Use frame"],
-				desc = L.opt_useframe_desc,
+				desc = L["opt_useframe_desc"],
 				order = 10,
 				width = "double"
 			},
@@ -350,6 +363,6 @@ end
 
 function mod:OnInitialize()
 	self.name = name
-	self.description = L.mod_broker_desc
+	self.description = L["mod_broker_desc"]
 	Skada:AddDisplaySystem("broker", self)
 end

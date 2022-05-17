@@ -7,7 +7,7 @@ Skada:AddLoadableModule("Potions", function(L)
 	local potionmod = mod:NewModule(L["Players list"])
 
 	-- cache frequently used globals
-	local pairs, ipairs, tconcat, format, strsub = pairs, ipairs, table.concat, string.format, string.sub
+	local pairs, tconcat, format, strsub = pairs, table.concat, string.format, string.sub
 	local GetItemInfo, GetSpellInfo = GetItemInfo, Skada.GetSpellInfo or GetSpellInfo
 	local UnitIsDeadOrGhost, GroupIterator = UnitIsDeadOrGhost, Skada.GroupIterator
 	local UnitGUID, UnitName, UnitClass, UnitBuff = UnitGUID, UnitName, UnitClass, UnitBuff
@@ -25,7 +25,7 @@ Skada:AddLoadableModule("Potions", function(L)
 			set.potion = (set.potion or 0) + 1
 
 			-- saving this to total set may become a memory hog deluxe.
-			if set ~= Skada.total then
+			if (set ~= Skada.total or Skada.db.profile.totalidc) and spellid then
 				local potionid = potionIDs[spellid]
 				player.potionspells = player.potionspells or {}
 				player.potionspells[potionid] = (player.potionspells[potionid] or 0) + 1
@@ -37,7 +37,6 @@ Skada:AddLoadableModule("Potions", function(L)
 		local spellid = ...
 		if spellid and potionIDs[spellid] then
 			Skada:DispatchSets(log_potion, srcGUID, srcName, srcFlags, spellid)
-			log_potion(Skada.total, srcGUID, srcName, srcFlags, spellid)
 		end
 	end
 
@@ -59,8 +58,7 @@ Skada:AddLoadableModule("Potions", function(L)
 
 				-- add to print out:
 				if next(potions) ~= nil and class and Skada.validclass[class] then
-					local colorStr = Skada.classcolors[class].colorStr or "ffffffff"
-					prepot[#prepot + 1] = format(prepotionStr, colorStr, playername, tconcat(potions, " "))
+					prepot[#prepot + 1] = format(prepotionStr, Skada.classcolors(class, true), playername, tconcat(potions, " "))
 				end
 				del(potions)
 			end
@@ -82,7 +80,7 @@ Skada:AddLoadableModule("Potions", function(L)
 	end
 
 	function potionmod:Update(win, set)
-		win.title = win.potionname or L.Unknown
+		win.title = win.potionname or L["Unknown"]
 		if win.class then
 			win.title = format("%s (%s)", win.title, L[win.class])
 		end
@@ -184,8 +182,9 @@ Skada:AddLoadableModule("Potions", function(L)
 			end
 
 			local nr = 0
-			for _, player in ipairs(set.players) do
-				if (not win.class or win.class == player.class) and (player.potion or 0) > 0 then
+			for i = 1, #set.players do
+				local player = set.players[i]
+				if player and player.potion and (not win.class or win.class == player.class) then
 					nr = nr + 1
 					local d = win:nr(nr)
 
@@ -356,10 +355,12 @@ Skada:AddLoadableModule("Potions", function(L)
 			click1 = playermod,
 			click4 = Skada.FilterClass,
 			click4_label = L["Toggle Class Filter"],
-			nototalclick = {playermod},
 			columns = {Count = true, Percent = false, sPercent = false},
 			icon = [[Interface\Icons\inv_potion_31]]
 		}
+
+		-- no total click.
+		playermod.nototal = true
 
 		Skada:RegisterForCL(PotionUsed, "SPELL_CAST_SUCCESS", {src_is_interesting_nopets = true})
 		Skada.RegisterMessage(self, "COMBAT_PLAYER_ENTER", "CheckPrePot")
@@ -392,8 +393,9 @@ Skada:AddLoadableModule("Potions", function(L)
 				tbl = wipe(tbl or Skada.cacheTable)
 				local total = 0
 
-				for _, p in ipairs(self.players) do
-					if (not class or class == p.class) and p.potionspells and p.potionspells[potionid] then
+				for i = 1, #self.players do
+					local p = self.players[i]
+					if p and p.potionspells and p.potionspells[potionid] and (not class or class == p.class) then
 						total = total + p.potionspells[potionid]
 						tbl[p.name] = {
 							id = p.id,

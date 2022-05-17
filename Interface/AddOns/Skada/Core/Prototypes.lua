@@ -1,7 +1,7 @@
 local Skada = Skada
 
-local pairs, ipairs, wipe, max = pairs, ipairs, wipe, math.max
-local getmetatable, setmetatable = getmetatable, setmetatable
+local pairs, wipe, max = pairs, wipe, math.max
+local getmetatable, setmetatable, time = getmetatable, setmetatable, time
 
 -- a dummy table used as fallback
 local dummyTable = {}
@@ -31,31 +31,28 @@ Skada.enemyPrototype = enemyPrototype
 
 -- binds a set table to set prototype
 function setPrototype:Bind(obj)
-	if obj then
-		if getmetatable(obj) ~= self then
-			setmetatable(obj, self)
-			self.__index = self
+	if obj and getmetatable(obj) ~= self then
+		setmetatable(obj, self)
+		self.__index = self
 
-			if obj.players then
-				for i, p in ipairs(obj.players) do
-					playerPrototype:Bind(p, obj)
-				end
-			end
-
-			if obj.enemies then
-				for i, e in ipairs(obj.enemies) do
-					enemyPrototype:Bind(e, obj)
-				end
+		if obj.players then
+			for i = 1, #obj.players do
+				playerPrototype:Bind(obj.players[i], obj)
 			end
 		end
 
-		return obj
+		if obj.enemies then
+			for i = 1, #obj.enemies do
+				enemyPrototype:Bind(obj.enemies[i], obj)
+			end
+		end
 	end
+	return obj
 end
 
 -- returns the segment's time
 function setPrototype:GetTime()
-	return Skada:GetSetTime(self)
+	return max((self.time or 0) > 0 and self.time or (time() - self.starttime), 0.1)
 end
 
 -- returns the actor's time if found (player or enemy)
@@ -67,8 +64,9 @@ end
 -- attempts to retrieve a player
 function setPrototype:GetPlayer(id, name)
 	if self.players and ((id and id ~= "total") or name) then
-		for _, actor in ipairs(self.players) do
-			if (id and actor.id == id) or (name and actor.name == name) then
+		for i = 1, #self.players do
+			local actor = self.players[i]
+			if actor and ((id and actor.id == id) or (name and actor.name == name)) then
 				return playerPrototype:Bind(actor, self)
 			end
 		end
@@ -82,8 +80,9 @@ end
 -- attempts to retrieve an enemy
 function setPrototype:GetEnemy(name, id)
 	if self.enemies and name then
-		for _, actor in ipairs(self.enemies) do
-			if (name and actor.name == name) or (id and actor.id == id) then
+		for i = 1, #self.enemies do
+			local actor = self.enemies[i]
+			if actor and ((name and actor.name == name) or (id and actor.id == id)) then
 				return enemyPrototype:Bind(actor, self)
 			end
 		end
@@ -98,8 +97,9 @@ end
 function setPrototype:GetActor(name, id)
 	-- player first.
 	if self.players and ((id and id ~= "total") or name) then
-		for _, actor in ipairs(self.players) do
-			if (id and actor.id == id) or (name and actor.name == name) then
+		for i = 1, #self.players do
+			local actor = self.players[i]
+			if actor and ((id and actor.id == id) or (name and actor.name == name)) then
 				return playerPrototype:Bind(actor, self)
 			end
 		end
@@ -107,8 +107,9 @@ function setPrototype:GetActor(name, id)
 
 	-- enemy second
 	if self.enemies and name then
-		for _, actor in ipairs(self.enemies) do
-			if (name and actor.name == name) or (id and actor.id == id) then
+		for i = 1, #self.enemies do
+			local actor = self.enemies[i]
+			if actor and ((name and actor.name == name) or (id and actor.id == id)) then
 				return enemyPrototype:Bind(actor, self), true
 			end
 		end
@@ -420,14 +421,12 @@ end
 
 -- binds a table to the prototype table
 function actorPrototype:Bind(obj, set)
-	if obj then
-		if getmetatable(obj) ~= self then
-			setmetatable(obj, self)
-			self.__index = self
-			obj.super = set
-		end
-		return obj
+	if obj and getmetatable(obj) ~= self then
+		setmetatable(obj, self)
+		self.__index = self
+		obj.super = set
 	end
+	return obj
 end
 
 -- for better dps calculation, we use active time for Arena/BGs.
@@ -499,8 +498,6 @@ function actorPrototype:GetDamageTargets(tbl)
 							tbl[name].class = actor.class
 							tbl[name].role = actor.role
 							tbl[name].spec = actor.spec
-						else
-							tbl[name].class = "UNKNOWN"
 						end
 					end
 				end
@@ -598,8 +595,6 @@ function actorPrototype:GetDamageSources(tbl)
 							tbl[name].class = actor.class
 							tbl[name].role = actor.role
 							tbl[name].spec = actor.spec
-						else
-							tbl[name].class = "UNKNOWN"
 						end
 					end
 				end
@@ -725,8 +720,6 @@ function actorPrototype:GetHealTargets(tbl)
 							tbl[name].class = actor.class
 							tbl[name].role = actor.role
 							tbl[name].spec = actor.spec
-						else
-							tbl[name].class = "UNKNOWN"
 						end
 					end
 				end
@@ -783,8 +776,6 @@ function actorPrototype:GetOverhealTargets(tbl)
 								tbl[name].class = actor.class
 								tbl[name].role = actor.role
 								tbl[name].spec = actor.spec
-							else
-								tbl[name].class = "UNKNOWN"
 							end
 						end
 					end
@@ -841,8 +832,6 @@ function actorPrototype:GetTotalHealTargets(tbl)
 							tbl[name].class = actor.class
 							tbl[name].role = actor.role
 							tbl[name].spec = actor.spec
-						else
-							tbl[name].class = "UNKNOWN"
 						end
 					end
 				end
@@ -928,8 +917,6 @@ function actorPrototype:GetAbsorbTargets(tbl)
 							tbl[name].class = actor.class
 							tbl[name].role = actor.role
 							tbl[name].spec = actor.spec
-						else
-							tbl[name].class = "UNKNOWN"
 						end
 					end
 				end
@@ -964,8 +951,6 @@ function actorPrototype:GetAbsorbHealTargets(tbl)
 								tbl[name].class = actor.class
 								tbl[name].role = actor.role
 								tbl[name].spec = actor.spec
-							else
-								tbl[name].class = "UNKNOWN"
 							end
 						end
 					end
@@ -1003,8 +988,6 @@ function actorPrototype:GetAbsorbHealTargets(tbl)
 								tbl[name].class = actor.class
 								tbl[name].role = actor.role
 								tbl[name].spec = actor.spec
-							else
-								tbl[name].class = "UNKNOWN"
 							end
 						end
 					end

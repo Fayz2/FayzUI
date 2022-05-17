@@ -1,6 +1,6 @@
 local Skada = Skada
 
-local pairs, ipairs, format, tostring = pairs, ipairs, string.format, tostring
+local pairs, format, tostring = pairs, string.format, tostring
 local min, max, floor = math.min, math.max, math.floor
 local UnitName, UnitGUID, UnitBuff = UnitName, UnitGUID, UnitBuff
 local UnitIsDeadOrGhost, GroupIterator = UnitIsDeadOrGhost, Skada.GroupIterator
@@ -21,9 +21,11 @@ local UpdateFunction, SpellUpdateFunction, aura_tooltip
 do
 	local L = LibStub("AceLocale-3.0"):GetLocale("Skada")
 	local mod = Skada:NewModule(L["Buffs and Debuffs"])
+	local spellschools = nil
 
 	function mod:OnEnable()
 		if not Skada:IsDisabled("Buffs") or not Skada:IsDisabled("Debuffs") then
+			spellschools = spellschools or Skada.spellschools
 			Skada.RegisterMessage(self, "COMBAT_PLAYER_LEAVE", "Clean")
 
 			-- add player's aura uptime getter.
@@ -40,13 +42,13 @@ do
 	end
 
 	function mod:Clean(event, set, curtime)
-		self.checked = nil
 		if event == "COMBAT_PLAYER_LEAVE" and set then
 			local maxtime = Skada:GetSetTime(set)
 			curtime = curtime or time()
 
-			for _, player in ipairs(set.players) do
-				if player.auras then
+			for i = 1, #set.players do
+				local player = set.players[i]
+				if player and player.auras then
 					for spellid, spell in pairs(player.auras) do
 						if spell.active ~= nil and spell.start then
 							spell.uptime = min(maxtime, spell.uptime + floor((curtime - spell.start) + 0.5))
@@ -95,8 +97,9 @@ do
 		local count = 0
 		if spellid and self.players then
 			tbl = wipe(tbl or cacheTable)
-			for _, p in ipairs(self.players) do
-				if p.auras and p.auras[spellid] then
+			for i = 1, #self.players do
+				local p = self.players[i]
+				if p and p.auras and p.auras[spellid] then
 					local maxtime = floor(p:GetTime())
 					local uptime = min(maxtime, p.auras[spellid].uptime)
 					count = count + 1
@@ -118,7 +121,9 @@ do
 	-- common functions.
 
 	function log_auraapply(set, aura)
-		if not (set and aura and aura.spellid) then return end
+		if not set or (set == Skada.total and not Skada.db.profile.totalidc) then return end
+		if not aura or not aura.spellid then return end
+
 		local player = Skada:GetPlayer(set, aura.playerid, aura.playername, aura.playerflags)
 		if player then
 			local spell = player.auras and player.auras[aura.spellid]
@@ -127,8 +132,8 @@ do
 				player.auras = player.auras or {}
 				player.auras[aura.spellid] = spell
 			else
-				spell.active = spell.active + 1
-				spell.count = spell.count + 1
+				spell.active = (spell.active or 0) + 1
+				spell.count = (spell.count or 0) + 1
 				spell.start = spell.start or time()
 
 				-- fix missing school
@@ -139,23 +144,22 @@ do
 
 			-- only records targets for debuffs
 			if aura.type == "DEBUFF" and aura.dstName then
-				local actor = Skada:GetActor(set, aura.dstGUID, aura.dstName, aura.dstFlags)
-				if actor then
-					spell.targets = spell.targets or {}
-					if not spell.targets[aura.dstName] then
-						spell.targets[aura.dstName] = {count = 1, active = 1, uptime = 0, start = time()}
-					else
-						spell.targets[aura.dstName].count = spell.targets[aura.dstName].count + 1
-						spell.targets[aura.dstName].active = (spell.targets[aura.dstName].active or 0) + 1
-						spell.targets[aura.dstName].start = spell.targets[aura.dstName].start or time()
-					end
+				spell.targets = spell.targets or {}
+				if not spell.targets[aura.dstName] then
+					spell.targets[aura.dstName] = {count = 1, active = 1, uptime = 0, start = time()}
+				else
+					spell.targets[aura.dstName].active = (spell.targets[aura.dstName].active or 0) + 1
+					spell.targets[aura.dstName].count = (spell.targets[aura.dstName].count or 0) + 1
+					spell.targets[aura.dstName].start = spell.targets[aura.dstName].start or time()
 				end
 			end
 		end
 	end
 
 	function log_aurarefresh(set, aura)
-		if not (set and aura and aura.spellid) then return end
+		if not set or (set == Skada.total and not Skada.db.profile.totalidc) then return end
+		if not aura or not aura.spellid then return end
+
 		local player = Skada:GetPlayer(set, aura.playerid, aura.playername, aura.playerflags)
 		local spell = player and player.auras and player.auras[aura.spellid]
 
@@ -168,7 +172,9 @@ do
 	end
 
 	function log_auraremove(set, aura)
-		if not (set and aura and aura.spellid) then return end
+		if not set or (set == Skada.total and not Skada.db.profile.totalidc) then return end
+		if not aura or not aura.spellid then return end
+
 		local player = Skada:GetPlayer(set, aura.playerid, aura.playername, aura.playerflags)
 		local spell = player and player.auras and player.auras[aura.spellid]
 
@@ -211,8 +217,9 @@ do
 				end
 
 				local nr = 0
-				for _, player in ipairs(set.players) do
-					if not win.class or win.class == player.class then
+				for i = 1, #set.players do
+					local player = set.players[i]
+					if player and (not win.class or win.class == player.class) then
 						local auracount, aurauptime = CountAuras(player.auras, atype)
 						if auracount > 0 and aurauptime > 0 then
 							nr = nr + 1
@@ -287,13 +294,8 @@ do
 		local aura = player and player.auras and player.auras[id]
 		if aura then
 			tooltip:AddLine(player.name .. ": " .. label)
-			if aura.school and Skada.spellschools[aura.school] then
-				tooltip:AddLine(
-					Skada.spellschools[aura.school].name,
-					Skada.spellschools[aura.school].r,
-					Skada.spellschools[aura.school].g,
-					Skada.spellschools[aura.school].b
-				)
+			if aura.school and spellschools and spellschools[aura.school] then
+				tooltip:AddLine(spellschools(aura.school))
 			end
 			if aura.count or aura.refresh then
 				tooltip:AddDoubleLine(L["Count"], aura.count or 0, 1, 1, 1)
@@ -327,7 +329,9 @@ Skada:AddLoadableModule("Buffs", function(L)
 	}
 
 	local function log_specialaura(set, aura)
-		if not (set and aura and aura.spellid) then return end
+		if not set or (set == Skada.total and not Skada.db.profile.totalidc) then return end
+		if not aura or not aura.spellid then return end
+
 		local player = Skada:GetPlayer(set, aura.playerid, aura.playername, aura.playerflags)
 		if player then
 			local spell = player.auras and player.auras[aura.spellid]
@@ -345,8 +349,7 @@ Skada:AddLoadableModule("Buffs", function(L)
 		if
 			spellid and -- just in case, you never know!
 			not ignoredSpells[spellid] and
-			(auratype == "BUFF" or speciallist[spellid]) and
-			Skada:IsPlayer(dstGUID, dstFlags, dstName)
+			(auratype == "BUFF" or speciallist[spellid])
 		then
 			aura.playerid = dstGUID
 			aura.playername = dstName
@@ -359,6 +362,8 @@ Skada:AddLoadableModule("Buffs", function(L)
 			aura.spellid = spellid
 			aura.spellschool = spellschool
 			aura.type = auratype or "BUFF"
+
+			Skada:FixPets(aura)
 
 			if event == "SPELL_PERIODIC_ENERGIZE" then
 				Skada:DispatchSets(log_specialaura, aura)
@@ -374,11 +379,11 @@ Skada:AddLoadableModule("Buffs", function(L)
 
 	function playermod:Enter(win, id, label)
 		win.spellid, win.spellname = id, label
-		win.title = format(L["%s's targets"], label or L.Unknown)
+		win.title = format(L["%s's targets"], label or L["Unknown"])
 	end
 
 	function playermod:Update(win, set)
-		win.title = format(L["%s's targets"], win.spellname or L.Unknown)
+		win.title = format(L["%s's targets"], win.spellname or L["Unknown"])
 		if not (win.spellid and set) then return end
 
 		local players, count = set:GetAuraPlayers(win.spellid)
@@ -418,7 +423,7 @@ Skada:AddLoadableModule("Buffs", function(L)
 	end
 
 	function spellmod:Update(win, set)
-		win.title = format(L["%s's buffs"], win.actorname or L.Unknown)
+		win.title = format(L["%s's buffs"], win.actorname or L["Unknown"])
 		SpellUpdateFunction("BUFF", win, set, mod)
 	end
 
@@ -459,10 +464,12 @@ Skada:AddLoadableModule("Buffs", function(L)
 			click1 = spellmod,
 			click4 = Skada.FilterClass,
 			click4_label = L["Toggle Class Filter"],
-			nototalclick = {spellmod},
 			columns = {Uptime = true, Count = false, Percent = true, sPercent = true},
 			icon = [[Interface\Icons\spell_holy_divinespirit]]
 		}
+
+		-- no total click.
+		spellmod.nototal = true
 
 		Skada:RegisterForCL(
 			HandleBuff,
@@ -474,6 +481,7 @@ Skada:AddLoadableModule("Buffs", function(L)
 		)
 
 		Skada.RegisterMessage(self, "COMBAT_PLAYER_ENTER", "CheckBuffs")
+		Skada.RegisterMessage(self, "COMBAT_PLAYER_LEAVE", function() mod.checked = nil end)
 		Skada:AddMode(self, L["Buffs and Debuffs"])
 
 		-- table of ignored spells:
@@ -510,43 +518,43 @@ Skada:AddLoadableModule("Debuffs", function(L)
 				srcFlags = dstFlags
 			end
 
-			if Skada:IsPlayer(srcGUID, srcFlags, srcName) then
-				aura.playerid = srcGUID
-				aura.playername = srcName
-				aura.playerflags = srcFlags
+			aura.playerid = srcGUID
+			aura.playername = srcName
+			aura.playerflags = srcFlags
 
-				aura.dstGUID = dstGUID
-				aura.dstName = dstName
-				aura.dstFlags = dstFlags
+			aura.dstGUID = dstGUID
+			aura.dstName = dstName
+			aura.dstFlags = dstFlags
 
-				aura.spellid = spellid
-				aura.spellschool = spellschool
-				aura.type = "DEBUFF"
+			aura.spellid = spellid
+			aura.spellschool = spellschool
+			aura.type = "DEBUFF"
 
-				if event == "SPELL_AURA_APPLIED" then
-					Skada:DispatchSets(log_auraapply, aura)
-					if queuedSpells[spellid] then
-						Skada:QueueUnit(queuedSpells[spellid], srcGUID, srcName, srcFlags, dstGUID)
-					end
-				elseif event == "SPELL_AURA_REFRESH" then
-					Skada:DispatchSets(log_aurarefresh, aura)
-				elseif event == "SPELL_AURA_REMOVED" then
-					Skada:DispatchSets(log_auraremove, aura)
-					if queuedSpells[spellid] then
-						Skada:UnqueueUnit(queuedSpells[spellid], dstGUID)
-					end
+			Skada:FixPets(aura)
+
+			if event == "SPELL_AURA_APPLIED" then
+				Skada:DispatchSets(log_auraapply, aura)
+				if queuedSpells[spellid] then
+					Skada:QueueUnit(queuedSpells[spellid], srcGUID, srcName, srcFlags, dstGUID)
+				end
+			elseif event == "SPELL_AURA_REFRESH" then
+				Skada:DispatchSets(log_aurarefresh, aura)
+			elseif event == "SPELL_AURA_REMOVED" then
+				Skada:DispatchSets(log_auraremove, aura)
+				if queuedSpells[spellid] then
+					Skada:UnqueueUnit(queuedSpells[spellid], dstGUID)
 				end
 			end
 		end
 	end
 
 	function targetspellmod:Enter(win, id, label)
-		win.targetname = label or L.Unknown
-		win.title = L["actor debuffs"](win.actorname or L.Unknown, label)
+		win.targetname = label or L["Unknown"]
+		win.title = L["actor debuffs"](win.actorname or L["Unknown"], label)
 	end
 
 	function targetspellmod:Update(win, set)
-		win.title = L["actor debuffs"](win.actorname or L.Unknown, win.targetname or L.Unknown)
+		win.title = L["actor debuffs"](win.actorname or L["Unknown"], win.targetname or L["Unknown"])
 		if not win.targetname then return end
 
 		local player = set and set:GetPlayer(win.actorid, win.actorname)
@@ -584,11 +592,11 @@ Skada:AddLoadableModule("Debuffs", function(L)
 
 	function spelltargetmod:Enter(win, id, label)
 		win.spellid, win.spellname = id, label
-		win.title = format(L["%s's <%s> targets"], win.actorname or L.Unknown, label)
+		win.title = format(L["%s's <%s> targets"], win.actorname or L["Unknown"], label)
 	end
 
 	function spelltargetmod:Update(win, set)
-		win.title = format(L["%s's <%s> targets"], win.actorname or L.Unknown, win.spellname or L.Unknown)
+		win.title = format(L["%s's <%s> targets"], win.actorname or L["Unknown"], win.spellname or L["Unknown"])
 		if not win.spellid then
 			return
 		end
@@ -635,7 +643,7 @@ Skada:AddLoadableModule("Debuffs", function(L)
 	end
 
 	function targetmod:Update(win, set)
-		win.title = format(L["%s's targets"], win.actorname or L.Unknown)
+		win.title = format(L["%s's targets"], win.actorname or L["Unknown"])
 
 		local player = set and set:GetPlayer(win.actorid, win.actorname)
 		if not player then return end
@@ -677,7 +685,7 @@ Skada:AddLoadableModule("Debuffs", function(L)
 	end
 
 	function spellmod:Update(win, set)
-		win.title = L["actor debuffs"](win.actorname or L.Unknown)
+		win.title = L["actor debuffs"](win.actorname or L["Unknown"])
 		SpellUpdateFunction("DEBUFF", win, set, mod)
 	end
 
@@ -694,10 +702,13 @@ Skada:AddLoadableModule("Debuffs", function(L)
 			click2 = targetmod,
 			click4 = Skada.FilterClass,
 			click4_label = L["Toggle Class Filter"],
-			nototalclick = {spellmod, targetmod},
 			columns = {Uptime = true, Count = false, Percent = true, sPercent = true},
 			icon = [[Interface\Icons\spell_shadow_shadowwordpain]]
 		}
+
+		-- no total click.
+		spellmod.nototal = true
+		targetmod.nototal = true
 
 		Skada:RegisterForCL(
 			HandleDebuff,
@@ -746,8 +757,6 @@ Skada:AddLoadableModule("Debuffs", function(L)
 								tbl[name].class = actor.class
 								tbl[name].role = actor.role
 								tbl[name].spec = actor.spec
-							else
-								tbl[name].class = "UNKNOWN"
 							end
 						end
 					end
@@ -769,8 +778,6 @@ Skada:AddLoadableModule("Debuffs", function(L)
 					tbl[name].class = actor.class
 					tbl[name].role = actor.role
 					tbl[name].spec = actor.spec
-				else
-					tbl[name].class = "UNKNOWN"
 				end
 			end
 			return tbl, maxtime

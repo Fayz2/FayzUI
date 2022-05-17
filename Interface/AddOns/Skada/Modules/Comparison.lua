@@ -11,9 +11,11 @@ Skada:AddLoadableModule("Comparison", function(L)
 	local targetmod = mod:NewModule(L["Damage target list"])
 	local dtargetmod = targetmod:NewModule(L["Damage spell list"])
 
-	local pairs, ipairs, format, max = pairs, ipairs, string.format, math.max
+	local pairs, format, max = pairs, string.format, math.max
 	local GetSpellInfo, T = Skada.GetSpellInfo or GetSpellInfo, Skada.Table
 	local cacheTable = T.get("Skada_CacheTable2")
+	local spellschools = Skada.spellschools
+	local COLOR_GOLD = {r = 1, g = 0.82, b = 0, colorStr = "ffffd100"}
 	local _
 
 	-- damage miss types
@@ -71,30 +73,25 @@ Skada:AddLoadableModule("Comparison", function(L)
 			if actor.id == mod.userGUID then
 				if spell then
 					tooltip:AddLine(actor.name .. " - " .. win.spellname)
-					if spell.school and Skada.spellschools[spell.school] then
-						tooltip:AddLine(
-							Skada.spellschools[spell.school].name,
-							Skada.spellschools[spell.school].r,
-							Skada.spellschools[spell.school].g,
-							Skada.spellschools[spell.school].b
-						)
+					if spell.school and spellschools[spell.school] then
+						tooltip:AddLine(spellschools(spell.school))
 					end
 
 					if label == L["Critical Hits"] and spell.criticalamount then
+						if spell.criticalmin then
+							tooltip:AddDoubleLine(L["Minimum"], Skada:FormatNumber(spell.criticalmin), 1, 1, 1)
+						end
 						tooltip:AddDoubleLine(L["Average"], Skada:FormatNumber(spell.criticalamount / spell.critical), 1, 1, 1)
-						if spell.criticalmin and spell.criticalmax then
-							tooltip:AddLine(" ")
-							tooltip:AddDoubleLine(L["Minimum Hit"], Skada:FormatNumber(spell.criticalmin), 1, 1, 1)
-							tooltip:AddDoubleLine(L["Maximum Hit"], Skada:FormatNumber(spell.criticalmax), 1, 1, 1)
-							tooltip:AddDoubleLine(L["Average Hit"], Skada:FormatNumber((spell.criticalmin + spell.criticalmax) / 2), 1, 1, 1)
+						if spell.criticalmax then
+							tooltip:AddDoubleLine(L["Maximum"], Skada:FormatNumber(spell.criticalmax), 1, 1, 1)
 						end
 					elseif label == L["Normal Hits"] and spell.hitamount then
+						if spell.hitmin then
+							tooltip:AddDoubleLine(L["Minimum"], Skada:FormatNumber(spell.hitmin), 1, 1, 1)
+						end
 						tooltip:AddDoubleLine(L["Average"], Skada:FormatNumber(spell.hitamount / spell.hit), 1, 1, 1)
-						if spell.hitmin and spell.hitmax then
-							tooltip:AddLine(" ")
-							tooltip:AddDoubleLine(L["Minimum Hit"], Skada:FormatNumber(spell.hitmin), 1, 1, 1)
-							tooltip:AddDoubleLine(L["Maximum Hit"], Skada:FormatNumber(spell.hitmax), 1, 1, 1)
-							tooltip:AddDoubleLine(L["Average Hit"], Skada:FormatNumber((spell.hitmin + spell.hitmax) / 2), 1, 1, 1)
+						if spell.hitmax then
+							tooltip:AddDoubleLine(L["Maximum"], Skada:FormatNumber(spell.hitmax), 1, 1, 1)
 						end
 					end
 				end
@@ -105,14 +102,9 @@ Skada:AddLoadableModule("Comparison", function(L)
 			local myspell = myspells and myspells[win.spellname]
 
 			if spell or myspell then
-				tooltip:AddLine(format(L["%s vs %s: %s"], actor and actor.name or L.Unknown, mod.userName, win.spellname))
-				if (spell.school and Skada.spellschools[spell.school]) or (myspell.school and Skada.spellschools[myspell.school]) then
-					tooltip:AddLine(
-						Skada.spellschools[spell and spell.school or myspell.school].name,
-						Skada.spellschools[spell and spell.school or myspell.school].r,
-						Skada.spellschools[spell and spell.school or myspell.school].g,
-						Skada.spellschools[spell and spell.school or myspell.school].b
-					)
+				tooltip:AddLine(format(L["%s vs %s: %s"], actor and actor.name or L["Unknown"], mod.userName, win.spellname))
+				if (spell.school and spellschools[spell.school]) or (myspell.school and spellschools[myspell.school]) then
+					tooltip:AddLine(spellschools(spell and spell.school or myspell.school))
 				end
 
 				if label == L["Critical Hits"] and (spell and spell.criticalamount or myspell.criticalamount) then
@@ -124,31 +116,27 @@ Skada:AddLoadableModule("Comparison", function(L)
 					num = (spell and spell.criticalamount) and (spell.criticalamount / spell.critical) or 0
 					mynum = (myspell and myspell.criticalamount) and (myspell.criticalamount / myspell.critical) or 0
 
+					if (spell and spell.criticalmin) or (myspell and myspell.criticalmin) then
+						tooltip:AddDoubleLine(L["Minimum"], FormatValueNumber(spell and spell.criticalmin, myspell and myspell.criticalmin, true), 1, 1, 1)
+					end
+
 					tooltip:AddDoubleLine(L["Average"], FormatValueNumber(num, mynum, true), 1, 1, 1)
 
-					if (spell and spell.criticalmin and spell.criticalmax) or (myspell and myspell.criticalmin and myspell.criticalmax) then
-						tooltip:AddLine(" ")
-						tooltip:AddDoubleLine(L["Minimum Hit"], FormatValueNumber(spell and spell.criticalmin, myspell and myspell.criticalmin, true), 1, 1, 1)
-						tooltip:AddDoubleLine(L["Maximum Hit"], FormatValueNumber(spell and spell.criticalmax, myspell and myspell.criticalmax, true), 1, 1, 1)
-
-						num = (spell and spell.criticalmin and spell.criticalmax) and ((spell.criticalmin + spell.criticalmax) / 2) or 0
-						mynum = (myspell and myspell.criticalmin and myspell.criticalmax) and ((myspell.criticalmin + myspell.criticalmax) / 2) or 0
-						tooltip:AddDoubleLine(L["Average Hit"], FormatValueNumber(num, mynum, true), 1, 1, 1)
+					if (spell and spell.criticalmax) or (myspell and myspell.criticalmax) then
+						tooltip:AddDoubleLine(L["Maximum"], FormatValueNumber(spell and spell.criticalmax, myspell and myspell.criticalmax, true), 1, 1, 1)
 					end
 				elseif label == L["Normal Hits"] and ((spell and spell.hitamount) or (myspell and myspell.hitamount)) then
 					local num = (spell and spell.hitamount) and (spell.hitamount / spell.hit) or 0
 					local mynum = (myspell and myspell.hitamount) and (myspell.hitamount / myspell.hit) or 0
 
+					if (spell and spell.hitmin) or (myspell and myspell.hitmin) then
+						tooltip:AddDoubleLine(L["Minimum"], FormatValueNumber(spell and spell.hitmin, myspell and myspell.hitmin, true), 1, 1, 1)
+					end
+
 					tooltip:AddDoubleLine(L["Average"], FormatValueNumber(num, mynum, true), 1, 1, 1)
 
-					if (spell and spell.hitmin and spell.hitmax) or (myspell and myspell.hitmin and myspell.hitmax) then
-						tooltip:AddLine(" ")
-						tooltip:AddDoubleLine(L["Minimum Hit"], FormatValueNumber(spell and spell.hitmin, myspell and myspell.hitmin, true), 1, 1, 1)
-						tooltip:AddDoubleLine(L["Maximum Hit"], FormatValueNumber(spell and spell.hitmax, myspell and myspell.hitmax, true), 1, 1, 1)
-
-						num = (spell and spell.hitmin and spell.hitmax) and ((spell.hitmin + spell.hitmax) / 2) or 0
-						mynum = (myspell and myspell.hitmin and myspell.hitmax) and ((myspell.hitmin + myspell.hitmax) / 2) or 0
-						tooltip:AddDoubleLine(L["Average Hit"], FormatValueNumber(num, mynum, true), 1, 1, 1)
+					if (spell and spell.hitmax) or (myspell and myspell.hitmax) then
+						tooltip:AddDoubleLine(L["Maximum"], FormatValueNumber(spell and spell.hitmax, myspell and myspell.hitmax, true), 1, 1, 1)
 					end
 				end
 			end
@@ -198,11 +186,11 @@ Skada:AddLoadableModule("Comparison", function(L)
 
 	function dspellmod:Enter(win, id, label)
 		win.spellname = label
-		win.title = format(L["%s vs %s: %s"], win.actorname or L.Unknown, mod.userName or L.Unknown, format(L["%s's damage breakdown"], label))
+		win.title = format(L["%s vs %s: %s"], win.actorname or L["Unknown"], mod.userName or L["Unknown"], format(L["%s's damage breakdown"], label))
 	end
 
 	function dspellmod:Update(win, set)
-		win.title = format(L["%s vs %s: %s"], win.actorname or L.Unknown, mod.userName or L.Unknown, format(L["%s's damage breakdown"], win.spellname or L.Unknown))
+		win.title = format(L["%s vs %s: %s"], win.actorname or L["Unknown"], mod.userName or L["Unknown"], format(L["%s's damage breakdown"], win.spellname or L["Unknown"]))
 		if not set or not win.spellname then return end
 
 		local actor = set:GetActor(win.actorname, win.actorid)
@@ -237,8 +225,9 @@ Skada:AddLoadableModule("Comparison", function(L)
 					nr = add_detail_bar(win, nr, L["Glancing"], spell.glancing, nil, nil, true)
 				end
 
-				for _, misstype in ipairs(missTypes) do
-					if (spell[misstype] or 0) > 0 then
+				for i = 1, #missTypes do
+					local misstype = missTypes[i]
+					if misstype and spell[misstype] then
 						nr = add_detail_bar(win, nr, L[misstype], spell[misstype], nil, nil, true)
 					end
 				end
@@ -275,8 +264,9 @@ Skada:AddLoadableModule("Comparison", function(L)
 				nr = add_detail_bar(win, nr, L["Glancing"], spell and spell.glancing, myspell and myspell.glancing)
 			end
 
-			for _, misstype in ipairs(missTypes) do
-				if (spell and (spell[misstype] or 0) > 0) or (myspell and (myspell[misstype] or 0) > 0) then
+			for i = 1, #missTypes do
+				local misstype = missTypes[i]
+				if misstype and ((spell and spell[misstype]) or (myspell and myspell[misstype])) then
 					nr = add_detail_bar(win, nr, L[misstype], spell and spell[misstype], myspell and myspell[misstype])
 				end
 			end
@@ -285,11 +275,11 @@ Skada:AddLoadableModule("Comparison", function(L)
 
 	function bspellmod:Enter(win, id, label)
 		win.spellname = label
-		win.title = format(L["%s vs %s: %s"], win.actorname or L.Unknown, mod.userName or L.Unknown, L["actor damage"](label))
+		win.title = format(L["%s vs %s: %s"], win.actorname or L["Unknown"], mod.userName or L["Unknown"], L["actor damage"](label))
 	end
 
 	function bspellmod:Update(win, set)
-		win.title = format(L["%s vs %s: %s"], win.actorname or L.Unknown, mod.userName or L.Unknown, L["actor damage"](win.spellname or L.Unknown))
+		win.title = format(L["%s vs %s: %s"], win.actorname or L["Unknown"], mod.userName or L["Unknown"], L["actor damage"](win.spellname or L["Unknown"]))
 		if not set or not win.spellname then return end
 
 		local actor = set:GetActor(win.actorname, win.actorid)
@@ -381,11 +371,11 @@ Skada:AddLoadableModule("Comparison", function(L)
 
 	function dtargetmod:Enter(win, id, label)
 		win.targetname = label
-		win.title = format(L["%s vs %s: Damage on %s"], win.actorname or L.Unknown, mod.userName or L.Unknown, label)
+		win.title = format(L["%s vs %s: Damage on %s"], win.actorname or L["Unknown"], mod.userName or L["Unknown"], label)
 	end
 
 	function dtargetmod:Update(win, set)
-		win.title = format(L["%s vs %s: Damage on %s"], win.actorname or L.Unknown, mod.userName or L.Unknown, win.targetname or L.Unknown)
+		win.title = format(L["%s vs %s: Damage on %s"], win.actorname or L["Unknown"], mod.userName or L["Unknown"], win.targetname or L["Unknown"])
 		if not set or not win.targetname then return end
 
 		local targets, actor = set:GetActorDamageTargets(win.actorid, win.actorname)
@@ -537,11 +527,11 @@ Skada:AddLoadableModule("Comparison", function(L)
 
 	function spellmod:Enter(win, id, label)
 		win.actorid, win.actorname = id, label
-		win.title = format(L["%s vs %s: Spells"], label, mod.userName or L.Unknown)
+		win.title = format(L["%s vs %s: Spells"], label, mod.userName or L["Unknown"])
 	end
 
 	function spellmod:Update(win, set)
-		win.title = format(L["%s vs %s: Spells"], win.actorname or L.Unknown, mod.userName or L.Unknown)
+		win.title = format(L["%s vs %s: Spells"], win.actorname or L["Unknown"], mod.userName or L["Unknown"])
 		if not set or not win.actorname then return end
 
 		local spells, actor = set:GetActorDamageSpells(win.actorid, win.actorname)
@@ -649,11 +639,11 @@ Skada:AddLoadableModule("Comparison", function(L)
 
 	function targetmod:Enter(win, id, label)
 		win.actorid, win.actorname = id, label
-		win.title = format(L["%s vs %s: Targets"], label, mod.userName or L.Unknown)
+		win.title = format(L["%s vs %s: Targets"], label, mod.userName or L["Unknown"])
 	end
 
 	function targetmod:Update(win, set)
-		win.title = format(L["%s vs %s: Targets"], win.actorname or L.Unknown, mod.userName or L.Unknown)
+		win.title = format(L["%s vs %s: Targets"], win.actorname or L["Unknown"], mod.userName or L["Unknown"])
 		if not set or not win.actorname then return end
 
 		local targets, actor = set:GetActorDamageTargets(win.actorid, win.actorname)
@@ -770,7 +760,8 @@ Skada:AddLoadableModule("Comparison", function(L)
 			local myamount = set:GetActorDamage(mod.userGUID, mod.userName)
 			local nr = 0
 
-			for _, player in ipairs(set.players) do
+			for i = 1, #set.players do
+				local player = set.players[i]
 				if CanCompare(player) then
 					local dps, amount = player:GetDPS()
 					if amount > 0 then
@@ -795,7 +786,7 @@ Skada:AddLoadableModule("Comparison", function(L)
 						if win.metadata then
 							-- color the selected player's bar.
 							if player.id == mod.userGUID then
-								d.color = Skada.classcolors.ARENA_GOLD
+								d.color = COLOR_GOLD
 							elseif d.color then
 								d.color = nil
 							end
@@ -812,11 +803,11 @@ Skada:AddLoadableModule("Comparison", function(L)
 	end
 
 	function mod:SetActor(win, id, label)
-		-- same player, same mode or no DisplayMode func?
-		if (id == mod.userGUID and win.selectedmode == mod) or not win.DisplayMode then return end
+		-- no DisplayMode func?
+		if not win.DisplayMode then return end
 
-		-- is it met?
-		if id == Skada.userGUID then
+		-- same actor or me? reset to the player
+		if id == Skada.userGUID or (id == mod.userGUID and win.selectedmode == mod) then
 			mod.userGUID = Skada.userGUID
 			mod.userName = Skada.userName
 			mod.userClass = Skada.userClass
@@ -853,10 +844,13 @@ Skada:AddLoadableModule("Comparison", function(L)
 			click2 = targetmod,
 			click3 = self.SetActor,
 			click3_label = L["Damage Comparison"],
-			nototalclick = {spellmod, targetmod},
 			columns = {Damage = true, DPS = true, Comparison = true, Percent = true},
 			icon = [[Interface\Icons\Ability_Warrior_OffensiveStance]]
 		}
+
+		-- no total click.
+		spellmod.nototal = true
+		targetmod.nototal = true
 
 		self.userGUID = Skada.userGUID
 		self.userName = Skada.userName

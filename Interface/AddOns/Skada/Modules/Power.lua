@@ -5,7 +5,7 @@ Skada:AddLoadableModule("Resources", function(L)
 	local mod = Skada:NewModule(L["Resources"])
 	mod.icon = [[Interface\Icons\spell_holy_rapture]]
 
-	local pairs, ipairs, format = pairs, ipairs, string.format
+	local pairs, format = pairs, string.format
 	local setmetatable, GetSpellInfo = setmetatable, Skada.GetSpellInfo or GetSpellInfo
 	local _
 
@@ -54,7 +54,7 @@ Skada:AddLoadableModule("Resources", function(L)
 			player[gainTable[gain.type]] = (player[gainTable[gain.type]] or 0) + gain.amount
 			set[gainTable[gain.type]] = (set[gainTable[gain.type]] or 0) + gain.amount
 
-			if set ~= Skada.total then
+			if (set ~= Skada.total or Skada.db.profile.totalidc) and gain.spellid then
 				player[spellTable[gain.type]] = player[spellTable[gain.type]] or {}
 				player[spellTable[gain.type]][gain.spellid] = (player[spellTable[gain.type]][gain.spellid] or 0) + gain.amount
 			end
@@ -73,7 +73,6 @@ Skada:AddLoadableModule("Resources", function(L)
 			Skada:FixPets(gain)
 
 			Skada:DispatchSets(log_gain, gain)
-			log_gain(Skada.total, gain)
 		end
 	end
 
@@ -104,9 +103,12 @@ Skada:AddLoadableModule("Resources", function(L)
 				showspots = true,
 				click1 = pmode,
 				click4 = Skada.FilterClass,
-				click4_label = L["Toggle Class Filter"],
-				nototalclick = {pmode}
+				click4_label = L["Toggle Class Filter"]
 			}
+
+			-- no total click.
+			pmode.nototal = true
+
 			return instance
 		end
 	end
@@ -114,7 +116,7 @@ Skada:AddLoadableModule("Resources", function(L)
 	-- this is the main module update function that shows the list
 	-- of players depending on the selected power gain type.
 	function basemod:Update(win, set)
-		win.title = self.moduleName or L.Unknown
+		win.title = self.moduleName or L["Unknown"]
 		if win.class then
 			win.title = format("%s (%s)", win.title, L[win.class])
 		end
@@ -127,8 +129,9 @@ Skada:AddLoadableModule("Resources", function(L)
 			end
 
 			local nr = 0
-			for _, player in ipairs(set.players) do
-				if (not win.class or win.class == player.class) and player[self.power] then
+			for i = 1, #set.players do
+				local player = set.players[i]
+				if player and player[self.power] and (not win.class or win.class == player.class) then
 					nr = nr + 1
 					local d = win:nr(nr)
 
@@ -165,12 +168,12 @@ Skada:AddLoadableModule("Resources", function(L)
 	-- player mods common Enter function.
 	function playermod:Enter(win, id, label)
 		win.actorid, win.actorname = id, label
-		win.title = format(L["%s's gained %s"], label, namesTable[self.powerid] or L.Unknown)
+		win.title = format(L["%s's gained %s"], label, namesTable[self.powerid] or L["Unknown"])
 	end
 
 	-- player mods main update function
 	function playermod:Update(win, set)
-		win.title = format(L["%s's gained %s"], win.actorname or L.Unknown, self.powername or L.Unknown)
+		win.title = format(L["%s's gained %s"], win.actorname or L["Unknown"], self.powername or L["Unknown"])
 		if not set or not win.actorname then return end
 
 		local actor, enemy = set:GetActor(win.actorname, win.actorid)

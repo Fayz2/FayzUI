@@ -6,6 +6,7 @@ Skada:AddLoadableModule("My Spells", function(L)
 
 	local pairs, format = pairs, string.format
 	local GetSpellInfo = Skada.GetSpellInfo or GetSpellInfo
+	local spellschools = Skada.spellschools
 	local _
 
 	local function spell_tooltip(win, id, label, tooltip)
@@ -24,13 +25,8 @@ Skada:AddLoadableModule("My Spells", function(L)
 
 		if spell then
 			tooltip:AddLine(player.name .. " - " .. label)
-			if spell.school and Skada.spellschools[spell.school] then
-				tooltip:AddLine(
-					Skada.spellschools[spell.school].name,
-					Skada.spellschools[spell.school].r,
-					Skada.spellschools[spell.school].g,
-					Skada.spellschools[spell.school].b
-				)
+			if spell.school and spellschools[spell.school] then
+				tooltip:AddLine(spellschools(spell.school))
 			end
 
 			-- count stats
@@ -45,22 +41,24 @@ Skada:AddLoadableModule("My Spells", function(L)
 			end
 
 			tooltip:AddLine(" ")
-			local amount = damage and (Skada.db.profile.absdamage and spell.total or spell.amount) or spell.amount
-			tooltip:AddDoubleLine(L["Average"], Skada:FormatNumber(amount / spell.count), 1, 1, 1)
 
-			if (spell.hitmin and spell.hitmax) or (spell.min and spell.max) then
+			if spell.hitmin or spell.min then
 				local spellmin = spell.hitmin or spell.min
 				if spell.criticalmin and spell.criticalmin < spellmin then
 					spellmin = spell.criticalmin
 				end
+				tooltip:AddDoubleLine(L["Minimum"], Skada:FormatNumber(spellmin), 1, 1, 1)
+			end
+
+			local amount = damage and (Skada.db.profile.absdamage and spell.total or spell.amount) or spell.amount
+			tooltip:AddDoubleLine(L["Average"], Skada:FormatNumber(amount / spell.count), 1, 1, 1)
+
+			if spell.hitmax or spell.max then
 				local spellmax = spell.hitmax or spell.max
 				if spell.criticalmax and spell.criticalmax < spellmax then
 					spellmax = spell.criticalmax
 				end
-				tooltip:AddLine(" ")
-				tooltip:AddDoubleLine(L["Minimum Hit"], Skada:FormatNumber(spellmin), 1, 1, 1)
-				tooltip:AddDoubleLine(L["Maximum Hit"], Skada:FormatNumber(spellmax), 1, 1, 1)
-				tooltip:AddDoubleLine(L["Average Hit"], Skada:FormatNumber((spellmin + spellmax) / 2), 1, 1, 1)
+				tooltip:AddDoubleLine(L["Maximum"], Skada:FormatNumber(spellmax), 1, 1, 1)
 			end
 		end
 	end
