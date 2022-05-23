@@ -30,7 +30,7 @@ local default = {
   borderOffset = 5,
   borderInset = 11,
   borderSize = 16,
-  borderBackdrop = "Blizzard Tooltip",
+  borderBackdrop = "Blizzard Tooltip"
 };
 
 local screenWidth, screenHeight = math.ceil(GetScreenWidth() / 20) * 20, math.ceil(GetScreenHeight() / 20) * 20;
@@ -70,6 +70,7 @@ local regionFunctions = {
 local function create(parent)
   -- Main region
   local region = CreateFrame("FRAME", nil, UIParent);
+  region.regionType = "model"
   region:SetMovable(true);
   region:SetResizable(true);
   region:SetMinResize(1, 1);
@@ -84,6 +85,8 @@ local function create(parent)
     region[k] = v
   end
 
+  region.AnchorSubRegion = WeakAuras.regionPrototype.AnchorSubRegion
+
   -- Return complete region
   return region;
 end
@@ -96,9 +99,7 @@ end
 local poolModelApi = CreateObjectPool(CreateModel)
 local poolUnitApi = CreateObjectPool(CreateModel)
 
-local function AcquireModel(region, data)
-  local pool = data.modelIsUnit and poolUnitApi or poolModelApi
-  local model = pool:Acquire()
+local function ConfigureModel(region, model, data)
   model.modelIsUnit = data.modelIsUnit
 
   model:ClearAllPoints()
@@ -111,6 +112,12 @@ local function AcquireModel(region, data)
   WeakAuras.SetModel(model, data.model_path, data.modelIsUnit, data.modelDisplayInfo)
   model:SetPosition(data.model_z, data.model_x, data.model_y);
   model:SetFacing(rad(region.rotation));
+
+  model:SetScript("OnShow", function()
+    WeakAuras.SetModel(model, data.model_path, data.modelIsUnit, data.modelDisplayInfo)
+    model:SetPosition(data.model_z, data.model_x, data.model_y);
+    model:SetFacing(rad(region.rotation));
+  end)
 
   if data.modelIsUnit then
     model:RegisterEvent("UNIT_MODEL_CHANGED");
@@ -146,6 +153,12 @@ local function AcquireModel(region, data)
   else
     model:SetScript("OnUpdate", nil)
   end
+end
+
+local function AcquireModel(region, data)
+  local pool = data.modelIsUnit and poolUnitApi or poolModelApi
+  local model = pool:Acquire()
+  ConfigureModel(region, model, data)
   return model
 end
 
@@ -248,6 +261,8 @@ local function modify(parent, region, data)
   function region:PreShow()
     if not region.model then
       region.model = AcquireModel(self, data)
+    else
+      ConfigureModel(region, region.model, data)
     end
   end
 
@@ -274,10 +289,16 @@ do
       end
       Private.StopProfileAura(id);
     end
+    for model in pairs(Private.barmodels) do
+      model:PreShow()
+    end
     Private.StopProfileSystem("model");
   end
- end
+end
 
+local function validate(data)
+  Private.EnforceSubregionExists(data, "subbackground")
+end
 
 -- Register new region type with WeakAuras
-WeakAuras.RegisterRegionType("model", create, modify, default, GetProperties);
+WeakAuras.RegisterRegionType("model", create, modify, default, GetProperties, validate);

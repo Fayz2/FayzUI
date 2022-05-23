@@ -122,6 +122,13 @@ local function onRelease(subRegion)
   subRegion:Hide()
 end
 
+local function getRotatedPoints(degrees)
+  local angle = rad(135 - degrees)
+  local vx = math.cos(angle)
+  local vy = math.sin(angle)
+  return 0.5+vx, 0.5-vy, 0.5-vy, 0.5-vx, 0.5+vy, 0.5+vx, 0.5-vx, 0.5+vy
+end
+
 local funcs = {
   Update = function(self, state)
     self.trigger_inverse = state.inverse
@@ -190,7 +197,7 @@ local funcs = {
     end
   end,
   UpdateTimerTick = function(self)
-    if self.tick_placement_mode == "ValueOffset" and self.state and self.state.progressType == "timed" then
+    if self.tick_placement_mode == "ValueOffset" and self.state and self.state.progressType == "timed" and not self.paused then
       if not self.TimerTick then
         self.TimerTick = self.UpdateTickPlacement
         self.parent:UpdateRegionHasTimerTick()
@@ -230,7 +237,13 @@ local funcs = {
     elseif self.tick_placement_mode == "ValueOffset" then
       if self.trigger_total and self.trigger_total ~= 0 then
         if self.state.progressType == "timed" then
-          tick_placement = self.state.expirationTime - GetTime() + self.tick_placement
+          if self.state.paused then
+            if self.state.remaining then
+              tick_placement = self.state.remaining + self.tick_placement
+            end
+          else
+            tick_placement = self.state.expirationTime - GetTime() + self.tick_placement
+          end
         else
           tick_placement = self.state.value + self.tick_placement
         end
@@ -316,8 +329,7 @@ local funcs = {
     end
   end,
   UpdateTickRotation = function(self)
-      local rad = math.rad(self.tick_rotation)
-      self.texture:SetRotation(rad)
+      self:UpdateTexCoord()
   end,
   SetTickMirror = function(self, mirror)
     if self.mirror ~= mirror then
@@ -326,11 +338,7 @@ local funcs = {
     end
   end,
   UpdateTickMirror = function(self)
-    if self.mirror then
-      self.texture:SetTexCoord(0,  1,  1,  1,  0,  0,  1,  0)
-    else
-      self.texture:SetTexCoord(0,  0,  1,  0,  0,  1,  1,  1)
-    end
+    self:UpdateTexCoord()
   end,
   SetTickBlendMode = function(self, mode)
     if self.tick_blend_mode ~= mode then
@@ -343,6 +351,14 @@ local funcs = {
       self.texture:SetBlendMode(self.tick_blend_mode)
     else
       self.texture:SetBlendMode("BLEND")
+    end
+  end,
+  UpdateTexCoord = function(self)
+    local ulx, uly, llx, lly, urx, ury, lrx, lry = getRotatedPoints(self.tick_rotation);
+    if self.mirror then
+      self.texture:SetTexCoord(urx, ury, lrx, lry, ulx, uly, llx, lly);
+    else
+      self.texture:SetTexCoord(ulx, uly, llx, lly, urx, ury, lrx, lry);
     end
   end,
 }

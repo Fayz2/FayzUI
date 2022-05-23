@@ -33,8 +33,7 @@ local default = {
   keepAspectRatio = false,
   frameStrata = 1,
   cooldown = false,
-  cooldownEdge = false,
-  subRegions = {}
+  cooldownEdge = false
 };
 
 WeakAuras.regionPrototype.AddAlphaToDefault(default);
@@ -174,10 +173,78 @@ local function AnchorSubRegion(self, subRegion, anchorType, selfPoint, anchorPoi
   end
 end
 
+local function setDesaturated(self, desaturated, ...)
+  self.isDesaturated = desaturated and 1 or 0
+  return self._SetDesaturated(self, desaturated, ...)
+end
+
+local function setTexture(self, ...)
+  local apply = self._SetTexture(self, ...)
+  if self.isDesaturated ~= nil then
+    self:_SetDesaturated(self.isDesaturated)
+  end
+  return apply
+end
+
+local function cooldown_onUpdate(self, e)
+  if self._duration then
+    if self._delay then
+      if not self._paused then
+        self._delay = self._delay - e
+      end
+      self:_SetCooldown(GetTime(), self._duration)
+      if self._delay <= 0 then
+        self._delay = nil
+        if not self._paused then
+          self:SetScript("OnUpdate", nil)
+        end
+      end
+      return
+    end
+    if self._paused then
+      self:_SetCooldown(GetTime() - self._paused, self._duration)
+    end
+  end
+end
+
+local function cooldown_pause(self)
+  if not self._paused then
+    self._paused = GetTime() - (self._start or 0)
+    self:SetScript("OnUpdate", cooldown_onUpdate)
+  end
+end
+
+local function cooldown_resume(self)
+  if self._paused then
+    self._start = GetTime() - self._paused
+  end
+  self._paused = nil
+  self:SetScript("OnUpdate", nil)
+end
+
+local function cooldown_setCooldown(self, start, duration, ...)
+  if self._start == start and self._duration == duration then
+    return
+  end
+  self._start = start
+  self._duration = duration
+  local getTime = GetTime()
+  local delay = start - getTime
+  if delay > 0 then
+    self._delay = delay
+    self:SetScript("OnUpdate", cooldown_onUpdate)
+  end
+  if self._paused then
+    self._paused = getTime - self._start
+  end
+  return self._SetCooldown(self, math.min(getTime, start), duration, ...)
+end
+
 local function create(parent, data)
   local font = "GameFontHighlight";
 
   local region = CreateFrame("FRAME", nil, parent);
+  region.regionType = "icon"
   region:SetMovable(true);
   region:SetResizable(true);
   region:SetMinResize(1, 1);
@@ -226,6 +293,11 @@ local function create(parent, data)
   region.icon = icon;
   icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark");
 
+  icon._SetDesaturated = icon.SetDesaturated
+  icon.SetDesaturated = setDesaturated
+  icon._SetTexture = icon.SetTexture
+  icon.SetTexture = setTexture
+
   --This section creates a unique frame id for the cooldown frame so that it can be created with a global reference
   --The reason is so that WeakAuras cooldown frames can interact properly with OmniCC (i.e., put on its ignore list for timer overlays)
   local id = data.id;
@@ -244,8 +316,10 @@ local function create(parent, data)
   region.cooldown = cooldown;
   cooldown:SetAllPoints(icon);
 
-  region.values = {};
-
+  cooldown._SetCooldown = cooldown.SetCooldown;
+  cooldown.SetCooldown = cooldown_setCooldown;
+  cooldown.Pause = cooldown_pause;
+  cooldown.Resume = cooldown_resume;
 
   local SetFrameLevel = region.SetFrameLevel;
 
@@ -349,6 +423,8 @@ local function modify(parent, region, data)
   region.zoom = data.zoom;
   region:UpdateSize()
 
+  icon:SetDesaturated(data.desaturate);
+
   local tooltipType = Private.CanHaveTooltip(data);
   if(tooltipType and data.useTooltip) then
     if not region.tooltipFrame then
@@ -433,7 +509,6 @@ local function modify(parent, region, data)
 
     iconPath = iconPath or self.displayIcon or "Interface\\Icons\\INV_Misc_QuestionMark"
     icon:SetTexture(iconPath)
-    icon:SetDesaturated(data.desaturate)
   end
 
   function region:Scale(scalex, scaley)
@@ -485,9 +560,14 @@ local function modify(parent, region, data)
   cooldown:Hide()
   if(data.cooldown) then
     function region:SetValue(value, total)
-      cooldown.duration = 0
-      cooldown.expirationTime = math.huge
-      cooldown:Hide();
+      cooldown.value = value
+      cooldown.total = total
+      if (value >= 0 and value <= total) then
+        cooldown:Show()
+        cooldown:SetCooldown(GetTime() - (total - value), total)
+      else
+        cooldown:Hide();
+      end
     end
 
     function region:SetTime(duration, expirationTime)
@@ -507,13 +587,28 @@ local function modify(parent, region, data)
       if (cooldown.duration and cooldown.duration > 0.01) then
         cooldown:Show();
         cooldown:SetCooldown(cooldown.expirationTime - cooldown.duration, cooldown.duration);
+        cooldown:Resume()
       end
     end
 
     function region:Update()
       local state = region.state
       if state.progressType == "timed" then
-        local expirationTime = state.expirationTime and state.expirationTime > 0 and state.expirationTime or math.huge;
+        local expirationTime
+        if state.paused == true then
+          if not region.paused then
+            region:Pause()
+          end
+          cooldown:Pause()
+          expirationTime = GetTime() + (state.remaining or 0)
+        else
+          if region.paused then
+            region:Resume()
+          end
+          cooldown:Resume()
+          expirationTime = state.expirationTime and state.expirationTime > 0 and state.expirationTime or math.huge;
+        end
+
         local duration = state.duration or 0
         if region.adjustedMinRelPercent then
           region.adjustedMinRel = region.adjustedMinRelPercent * duration
@@ -542,6 +637,7 @@ local function modify(parent, region, data)
         local adjustMin = region.adjustedMin or region.adjustedMinRel or 0;
         local max = region.adjustedMax or region.adjustedMaxRel or total;
         region:SetValue(value - adjustMin, max - adjustMin);
+        cooldown:Pause()
       else
         region:SetTime(0, math.huge)
       end
@@ -576,4 +672,8 @@ local function modify(parent, region, data)
   region:SetHeight(region:GetHeight())
 end
 
-WeakAuras.RegisterRegionType("icon", create, modify, default, GetProperties)
+local function validate(data)
+  Private.EnforceSubregionExists(data, "subbackground")
+end
+
+WeakAuras.RegisterRegionType("icon", create, modify, default, GetProperties, validate)
