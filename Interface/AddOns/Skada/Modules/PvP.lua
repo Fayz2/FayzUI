@@ -1,8 +1,8 @@
 local Skada = Skada
-Skada:AddLoadableModule("Player vs. Player", "mod_pvp_desc", function(L)
+Skada:RegisterModule("Player vs. Player", "mod_pvp_desc", function(L, P)
 	if Skada:IsDisabled("Player vs. Player") then return end
 
-	local mod = Skada:NewModule(L["Player vs. Player"], "AceEvent-3.0")
+	local mod = Skada:NewModule("Player vs. Player")
 
 	local format, wipe, GetTime = string.format, wipe, GetTime
 	local UnitGUID, UnitClass, UnitBuff, UnitIsPlayer = UnitGUID, UnitClass, UnitBuff, UnitIsPlayer
@@ -165,9 +165,9 @@ Skada:AddLoadableModule("Player vs. Player", "mod_pvp_desc", function(L)
 		end
 	end
 
-	function mod:UNIT_AURA(event, unit)
-		if Skada.instanceType ~= "pvp" and Skada.instanceType ~= "arena" then
-			self:UnregisterEvent("UNIT_AURA")
+	function mod:UNIT_AURA(_, unit)
+		if Skada.insType ~= "pvp" and Skada.insType ~= "arena" then
+			Skada.UnregisterEvent(self, "UNIT_AURA")
 		elseif unit and UnitIsPlayer(unit) and not specsCache[UnitGUID(unit)] then
 			local _, class = UnitClass(unit)
 			if class and Skada.validclass[class] then
@@ -185,9 +185,9 @@ Skada:AddLoadableModule("Player vs. Player", "mod_pvp_desc", function(L)
 		end
 	end
 
-	function mod:UNIT_SPELLCAST_START(event, unit)
-		if Skada.instanceType ~= "pvp" and Skada.instanceType ~= "arena" then
-			self:UnregisterEvent("UNIT_SPELLCAST_START")
+	function mod:UNIT_SPELLCAST_START(_, unit)
+		if Skada.insType ~= "pvp" and Skada.insType ~= "arena" then
+			Skada.UnregisterEvent(self, "UNIT_SPELLCAST_START")
 		elseif unit and UnitIsPlayer(unit) and not specsCache[UnitGUID(unit)] then
 			local _, class = UnitClass(unit)
 			local spell = UnitCastingInfo(unit)
@@ -197,22 +197,24 @@ Skada:AddLoadableModule("Player vs. Player", "mod_pvp_desc", function(L)
 		end
 	end
 
-	function mod:CheckZone()
+	function mod:CheckZone(_, current, previous)
+		if current == previous then return end
+
 		specsCache = wipe(specsCache or {})
 
-		if Skada.instanceType == "arena" or Skada.instanceType == "pvp" then
+		if current == "arena" or current == "pvp" then
 			BuildSpellsList()
-			self:RegisterEvent("UNIT_AURA")
-			self:RegisterEvent("UNIT_SPELLCAST_START")
+			Skada.RegisterEvent(self, "UNIT_AURA")
+			Skada.RegisterEvent(self, "UNIT_SPELLCAST_START")
 			Skada.RegisterCallback(self, "Skada_GetEnemy", "GetEnemy")
 		else
-			self:UnregisterEvent("UNIT_AURA")
-			self:UnregisterEvent("UNIT_SPELLCAST_START")
+			Skada.UnregisterEvent(self, "UNIT_AURA")
+			Skada.UnregisterEvent(self, "UNIT_SPELLCAST_START")
 			Skada.UnregisterCallback(self, "Skada_GetEnemy", "GetEnemy")
 		end
 	end
 
-	function mod:GetEnemy(_, enemy)
+	function mod:GetEnemy(_, enemy, set)
 		if enemy and not enemy.fake and enemy.class and Skada.validclass[enemy.class] then
 			if enemy.spec == nil then
 				enemy.spec = specsCache[enemy.id]
@@ -227,7 +229,7 @@ Skada:AddLoadableModule("Player vs. Player", "mod_pvp_desc", function(L)
 			end
 
 			if enemy.last == nil then
-				enemy.last = GetTime()
+				enemy.last = set.last_time or GetTime()
 			end
 		end
 	end
@@ -238,19 +240,19 @@ Skada:AddLoadableModule("Player vs. Player", "mod_pvp_desc", function(L)
 		if Skada.Ascension then return end
 
 		specsCache = specsCache or {}
-		Skada.RegisterCallback(self, "Skada_ZoneCheck", "CheckZone")
+		Skada.RegisterMessage(self, "ZONE_TYPE_CHANGED", "CheckZone")
 	end
 
 	function mod:OnDisable()
 		Skada.forPVP = nil
-		Skada.UnregisterAllCallbacks(self)
+		Skada.UnregisterAllMessages(self)
 	end
 
 	---------------------------------------------------------------------------
 
 	function mod:OnInitialize()
-		if Skada.db.profile.modules.arena then
-			Skada.db.profile.modules.arena = nil
+		if P.modules.arena then
+			P.modules.arena = nil
 		end
 
 		-- arena custom colors

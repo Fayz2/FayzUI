@@ -196,12 +196,12 @@ end
 -- ======= --
 -- CC Done --
 -- ======= --
-Skada:AddLoadableModule("CC Done", function(L)
+Skada:RegisterModule("CC Done", function(L, P, _, C, new, _, clear)
 	if Skada:IsDisabled("CC Done") then return end
 
-	local mod = Skada:NewModule(L["CC Done"])
-	local playermod = mod:NewModule(L["Crowd Control Spells"])
-	local targetmod = mod:NewModule(L["Crowd Control Targets"])
+	local mod = Skada:NewModule("CC Done")
+	local playermod = mod:NewModule("Crowd Control Spells")
+	local targetmod = mod:NewModule("Crowd Control Targets")
 
 	local function log_ccdone(set, cc)
 		local player = Skada:GetPlayer(set, cc.playerid, cc.playername, cc.playerflags)
@@ -211,7 +211,7 @@ Skada:AddLoadableModule("CC Done", function(L)
 			set.ccdone = (set.ccdone or 0) + 1
 
 			-- saving this to total set may become a memory hog deluxe.
-			if set == Skada.total and not Skada.db.profile.totalidc then return end
+			if set == Skada.total and not P.totalidc then return end
 
 			-- record the spell.
 			local spell = player.ccdonespells and player.ccdonespells[cc.spellid]
@@ -397,23 +397,25 @@ Skada:AddLoadableModule("CC Done", function(L)
 	end
 
 	function mod:AddToTooltip(set, tooltip)
-		if (set.ccdone or 0) > 0 then
+		if set.ccdone and set.ccdone > 0 then
 			tooltip:AddDoubleLine(L["CC Done"], set.ccdone, 1, 1, 1)
 		end
 	end
 
 	function mod:GetSetSummary(set)
-		return tostring(set.ccdone or 0), set.ccdone or 0
+		local ccdone = set.ccdone or 0
+		return tostring(ccdone), ccdone
 	end
 
 	function playerPrototype:GetCCDoneTargets(tbl)
 		if self.ccdonespells then
-			tbl = wipe(tbl or Skada.cacheTable)
+			tbl = clear(tbl or C)
 			for _, spell in pairs(self.ccdonespells) do
 				if spell.targets then
 					for name, count in pairs(spell.targets) do
 						if not tbl[name] then
-							tbl[name] = {count = count}
+							tbl[name] = new()
+							tbl[name].count = count
 						else
 							tbl[name].count = tbl[name].count + count
 						end
@@ -436,12 +438,12 @@ end)
 -- ======== --
 -- CC Taken --
 -- ======== --
-Skada:AddLoadableModule("CC Taken", function(L)
+Skada:RegisterModule("CC Taken", function(L, P, _, C, new, _, clear)
 	if Skada:IsDisabled("CC Taken") then return end
 
-	local mod = Skada:NewModule(L["CC Taken"])
-	local playermod = mod:NewModule(L["Crowd Control Spells"])
-	local sourcemod = mod:NewModule(L["Crowd Control Sources"])
+	local mod = Skada:NewModule("CC Taken")
+	local playermod = mod:NewModule("Crowd Control Spells")
+	local sourcemod = mod:NewModule("Crowd Control Sources")
 
 	local RaidCCSpells = {
 		[16869] = 0x10, -- Maleki the Pallid/Ossirian the Unscarred: Ice Tomb (Stratholme/??)
@@ -463,7 +465,7 @@ Skada:AddLoadableModule("CC Taken", function(L)
 			set.cctaken = (set.cctaken or 0) + 1
 
 			-- saving this to total set may become a memory hog deluxe.
-			if set == Skada.total and not Skada.db.profile.totalidc then return end
+			if set == Skada.total and not P.totalidc then return end
 
 			-- record the spell.
 			local spell = player.cctakenspells and player.cctakenspells[cc.spellid]
@@ -650,23 +652,25 @@ Skada:AddLoadableModule("CC Taken", function(L)
 	end
 
 	function mod:AddToTooltip(set, tooltip)
-		if (set.cctaken or 0) > 0 then
+		if set.cctaken and set.cctaken > 0 then
 			tooltip:AddDoubleLine(L["CC Taken"], set.cctaken, 1, 1, 1)
 		end
 	end
 
 	function mod:GetSetSummary(set)
-		return tostring(set.cctaken or 0), set.cctaken or 0
+		local cctaken = set.cctaken or 0
+		return tostring(cctaken), cctaken
 	end
 
 	function playerPrototype:GetCCTakenSources(tbl)
 		if self.cctakenspells then
-			tbl = wipe(tbl or Skada.cacheTable)
+			tbl = clear(tbl or C)
 			for _, spell in pairs(self.cctakenspells) do
 				if spell.sources then
 					for name, count in pairs(spell.sources) do
 						if not tbl[name] then
-							tbl[name] = {count = count}
+							tbl[name] = new()
+							tbl[name].count = count
 						else
 							tbl[name].count = tbl[name].count + count
 						end
@@ -689,12 +693,12 @@ end)
 -- =========== --
 -- CC Breakers --
 -- =========== --
-Skada:AddLoadableModule("CC Breaks", function(L)
+Skada:RegisterModule("CC Breaks", function(L, P, _, C, new, _, clear)
 	if Skada:IsDisabled("CC Breaks") then return end
 
-	local mod = Skada:NewModule(L["CC Breaks"])
-	local playermod = mod:NewModule(L["Crowd Control Spells"])
-	local targetmod = mod:NewModule(L["Crowd Control Targets"])
+	local mod = Skada:NewModule("CC Breaks")
+	local playermod = mod:NewModule("Crowd Control Spells")
+	local targetmod = mod:NewModule("Crowd Control Targets")
 
 	local UnitName, UnitInRaid, IsInRaid = UnitName, UnitInRaid, Skada.IsInRaid
 	local GetPartyAssignment, UnitIterator = GetPartyAssignment, Skada.UnitIterator
@@ -707,7 +711,7 @@ Skada:AddLoadableModule("CC Breaks", function(L)
 			set.ccbreak = (set.ccbreak or 0) + 1
 
 			-- saving this to total set may become a memory hog deluxe.
-			if set == Skada.total and not Skada.db.profile.totalidc then return end
+			if set == Skada.total and not P.totalidc then return end
 
 			-- record the spell.
 			local spell = player.ccbreakspells and player.ccbreakspells[cc.spellid]
@@ -750,11 +754,11 @@ Skada:AddLoadableModule("CC Breaks", function(L)
 
 		-- Optional announce
 		srcName = srcName_modified or srcName
-		if Skada.db.profile.modules.ccannounce and IsInRaid() and UnitInRaid(srcName) then
-			if Skada.instanceType == "pvp" then return end
+		if P.modules.ccannounce and IsInRaid() and UnitInRaid(srcName) then
+			if Skada.insType == "pvp" then return end
 
 			-- Ignore main tanks and main assist?
-			if Skada.db.profile.modules.ccignoremaintanks then
+			if P.modules.ccignoremaintanks then
 				-- Loop through our raid and return if src is a main tank.
 				for unit in UnitIterator(true) do -- exclude pets
 					if UnitName(unit) == srcName and (GetPartyAssignment("MAINTANK", unit) or GetPartyAssignment("MAINASSIST", unit)) then
@@ -925,23 +929,25 @@ Skada:AddLoadableModule("CC Breaks", function(L)
 	end
 
 	function mod:AddToTooltip(set, tooltip)
-		if (set.ccbreak or 0) > 0 then
+		if set.ccbreak and set.ccbreak > 0 then
 			tooltip:AddDoubleLine(L["CC Breaks"], set.ccbreak, 1, 1, 1)
 		end
 	end
 
 	function mod:GetSetSummary(set)
-		return tostring(set.ccbreak or 0), set.ccbreak or 0
+		local ccbreak = set.ccbreak or 0
+		return tostring(ccbreak), ccbreak
 	end
 
 	function playerPrototype:GetCCBreakTargets(tbl)
 		if self.ccbreakspells then
-			tbl = wipe(tbl or Skada.cacheTable)
+			tbl = clear(tbl or C)
 			for _, spell in pairs(self.ccbreakspells) do
 				if spell.targets then
 					for name, count in pairs(spell.targets) do
 						if not tbl[name] then
-							tbl[name] = {count = count}
+							tbl[name] = new()
+							tbl[name].count = count
 						else
 							tbl[name].count = tbl[name].count + count
 						end
@@ -963,12 +969,12 @@ Skada:AddLoadableModule("CC Breaks", function(L)
 	function mod:OnInitialize()
 		Skada.options.args.modules.args.ccoptions = {
 			type = "group",
-			name = self.moduleName,
-			desc = format(L["Options for %s."], self.moduleName),
+			name = self.localeName,
+			desc = format(L["Options for %s."], self.localeName),
 			args = {
 				header = {
 					type = "description",
-					name = self.moduleName,
+					name = self.localeName,
 					fontSize = "large",
 					image = [[Interface\Icons\spell_holy_sealofvalor]],
 					imageWidth = 18,
@@ -985,7 +991,7 @@ Skada:AddLoadableModule("CC Breaks", function(L)
 				},
 				ccannounce = {
 					type = "toggle",
-					name = format(L["Announce %s"], self.moduleName),
+					name = format(L["Announce %s"], self.localeName),
 					order = 10,
 					width = "double"
 				},

@@ -4,16 +4,34 @@ local Skada = Skada
 local L = LibStub("AceLocale-3.0"):GetLocale("Skada")
 
 -------------------------------------------------------------------------------
--- ingoredSpells
--- a table of spells that are ignored globally or per module.
+-- table we need.
 
-local ignoredSpells = {}
+-->> START OF PROTECTED CODE <<--
+
+local ignoredSpells = {} -- a table of spells that are ignored per module.
+local creatureToFight = {} -- a table of creatures IDs used to fix segments names.
+local creatureToBoss = {} -- a table of adds used to deternmine the main boss in encounters.
+
+-- use LibBossIDs-1.0 as backup plan
+local LBI = LibStub("LibBossIDs-1.0", true)
+if LBI then
+	setmetatable(creatureToBoss, {__index = LBI.BossIDs})
+end
+
+-- add to Skada scope.
 Skada.ignoredSpells = ignoredSpells
+Skada.creatureToFight = creatureToFight
+Skada.creatureToBoss = creatureToBoss
+
+-->> END OF PROTECTED CODE <<--
+
+-->> START OF EDITABLE CODE <<--
+
+-------------------------------------------------------------------------------
+-- ingoredSpells
 
 -- entries should be like so:
 -- [spellid] = true
-
--->> start of editable lines <<--
 
 -- [[ absorbs modules ]] --
 -- ignoredSpells.absorbs = {}
@@ -84,23 +102,51 @@ ignoredSpells.firsthit = {
 	[60122] = true -- Baby Spice
 }
 
--->> end of editable lines <<--
+-- [[ no active time spells ]] --
+if not Skada.Ascension then -- not meant for Ascension
+	ignoredSpells.activeTime = {
+		-- Retribution Aura
+		[7294] = true, -- Rank 1
+		[7294] = true, -- Rank 1
+		[10298] = true, -- Rank 2
+		[10299] = true, -- Rank 3
+		[10300] = true, -- Rank 4
+		[10301] = true, -- Rank 5
+		[27150] = true, -- Rank 6
+		[54043] = true, -- Rank 7
+		-- Molten Armor
+		[34913] = true, -- Rank 1
+		[43043] = true, -- Rank 2
+		[43044] = true, -- Rank 3
+		-- Lightning Shield
+		[26364] = true, -- Rank 1
+		[26365] = true, -- Rank 2
+		[26366] = true, -- Rank 3
+		[26367] = true, -- Rank 5
+		[26370] = true, -- Rank 6
+		[26363] = true, -- Rank 7
+		[26371] = true, -- Rank 8
+		[26372] = true, -- Rank 9
+		[49278] = true, -- Rank 10
+		[49279] = true, -- Rank 11
+		-- Fire Shield
+		[2947] = true, -- Rank 1
+		[8316] = true, -- Rank 2
+		[8317] = true, -- Rank 3
+		[11770] = true, -- Rank 4
+		[11771] = true, -- Rank 5
+		[27269] = true, -- Rank 6
+		[47983] = true, -- Rank 7
+	}
 
 -- ----------------------------- --
 -- >>>>> PROJECT ASCENSION <<<<< --
 -- ----------------------------- --
 
-if Skada.Ascension then
+else -- <= Skada.Ascension == true
 	--
 	-- add your ascension-specific stuff
 	--
-
-	-- dynamically add bosses instead of modifying LibBossIDs-1.0
-	-- < never modify a library >
-	local creatureToBoss = {}
-	Skada.creatureToBoss = creatureToBoss
-
-	-->> start of editable lines <<--
 
 	-- Tempest Keep: The Eye (Ascended 10man)
 	creatureToBoss[218805] = true -- High Astromancer Solarian
@@ -119,19 +165,11 @@ if Skada.Ascension then
 	creatureToBoss[221273] = true -- Phaseshift Bulwark
 	creatureToBoss[221274] = true -- Staff of Disintegration
 
-	-->> end of editable lines <<--
-
 	return -- skip the rest of the file.
 end
 
 -------------------------------------------------------------------------------
 -- creatureToFight
--- a table of creatures IDs used to fix segments names.
-
-local creatureToFight = {}
-Skada.creatureToFight = creatureToFight
-
--->> start of editable lines <<--
 
 -- [[ Icecrown Citadel ]] --
 creatureToFight[36960] = L["Icecrown Gunship Battle"] -- Kor'kron Sergeant
@@ -202,6 +240,7 @@ creatureToFight[34456] = L["Faction Champions"] -- Malithas Brightblade <Paladin
 creatureToFight[34458] = L["Faction Champions"] -- Gorgrim Shadowcleave <Death Knight>
 creatureToFight[34459] = L["Faction Champions"] -- Erin Misthoof <Druid>
 creatureToFight[35610] = L["Faction Champions"] -- Cat <Ruj'kah's Pet / Alyssia Moonstalker's Pet>
+
 creatureToFight[34496] = L["Twin Val'kyr"] -- Eydis Darkbane
 creatureToFight[34497] = L["Twin Val'kyr"] -- Fjola Lightbane
 
@@ -224,16 +263,8 @@ creatureToFight[33432] = L["Mimiron"] -- Leviathan Mk II
 creatureToFight[33651] = L["Mimiron"] -- VX-001
 creatureToFight[33670] = L["Mimiron"] -- Aerial Command Unit
 
--->> end of editable lines <<--
-
 -------------------------------------------------------------------------------
 -- creatureToBoss
--- a table of adds used to deternmine the main boss in encounters.
-
-local creatureToBoss = {}
-Skada.creatureToBoss = creatureToBoss
-
--->> start of editable lines <<--
 
 -- [[ Icecrown Citadel ]] --
 creatureToBoss[36960] = 37215 -- Kor'kron Sergeant > Orgrim's Hammer
@@ -271,4 +302,4 @@ creatureToBoss[33432] = 33350 -- Leviathan Mk II > Mimiron
 creatureToBoss[33651] = 33350 -- VX-001 > Mimiron
 creatureToBoss[33670] = 33350 -- Aerial Command Unit > Mimiron
 
--->> end of editable lines <<--
+-->> END OF EDITABLE CODE <<--

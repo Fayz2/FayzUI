@@ -1,19 +1,19 @@
 local Skada = Skada
-Skada:AddLoadableModule("Comparison", function(L)
+Skada:RegisterModule("Comparison", function(L, P)
 	if Skada:IsDisabled("Damage", "Comparison") then return end
 
-	local mod = Skada:NewModule(L["Comparison"])
+	local parent = Skada:GetModule("Damage")
 
-	local spellmod = mod:NewModule(L["Damage spell list"])
-	local dspellmod = spellmod:NewModule(L["Damage spell details"])
-	local bspellmod = spellmod:NewModule(L["Damage Breakdown"])
-
-	local targetmod = mod:NewModule(L["Damage target list"])
-	local dtargetmod = targetmod:NewModule(L["Damage spell list"])
+	local mod = parent:NewModule("Comparison")
+	local spellmod = mod:NewModule("Damage spell list")
+	local dspellmod = spellmod:NewModule("Damage spell details")
+	local bspellmod = spellmod:NewModule("Damage Breakdown")
+	local targetmod = mod:NewModule("Damage target list")
+	local dtargetmod = targetmod:NewModule("Damage spell list")
+	local C = Skada.cacheTable2
 
 	local pairs, format, max = pairs, string.format, math.max
-	local GetSpellInfo, T = Skada.GetSpellInfo or GetSpellInfo, Skada.Table
-	local cacheTable = T.get("Skada_CacheTable2")
+	local GetSpellInfo = Skada.GetSpellInfo or GetSpellInfo
 	local spellschools = Skada.spellschools
 	local COLOR_GOLD = {r = 1, g = 0.82, b = 0, colorStr = "ffffd100"}
 	local _
@@ -26,9 +26,9 @@ Skada:AddLoadableModule("Comparison", function(L)
 	end
 
 	-- percentage colors
-	local red = "|cffffaaaa-%s|r"
-	local green = "|cffaaffaa+%s|r"
-	local grey = "|cff808080%s|r"
+	local red = "\124cffffaaaa-%s\124r"
+	local green = "\124cffaaffaa+%s\124r"
+	local grey = "\124cff808080%s\124r"
 
 	local function FormatPercent(value1, value2, cond)
 		if cond == false then return end
@@ -65,7 +65,7 @@ Skada:AddLoadableModule("Comparison", function(L)
 	end
 
 	local function spellmod_tooltip(win, id, label, tooltip)
-		if label == L["Critical Hits"] or label == L["Normal Hits"] then
+		if label == L["Critical Hits"] or label == L["Normal Hits"] or label == L["Glancing"] then
 			local set = win:GetSelectedSet()
 			local actor = set and set:GetActor(win.actorname, win.actorid)
 			local spell = actor.damagespells and actor.damagespells[win.spellname]
@@ -81,18 +81,26 @@ Skada:AddLoadableModule("Comparison", function(L)
 						if spell.criticalmin then
 							tooltip:AddDoubleLine(L["Minimum"], Skada:FormatNumber(spell.criticalmin), 1, 1, 1)
 						end
-						tooltip:AddDoubleLine(L["Average"], Skada:FormatNumber(spell.criticalamount / spell.critical), 1, 1, 1)
 						if spell.criticalmax then
 							tooltip:AddDoubleLine(L["Maximum"], Skada:FormatNumber(spell.criticalmax), 1, 1, 1)
 						end
+						tooltip:AddDoubleLine(L["Average"], Skada:FormatNumber(spell.criticalamount / spell.critical), 1, 1, 1)
 					elseif label == L["Normal Hits"] and spell.hitamount then
 						if spell.hitmin then
 							tooltip:AddDoubleLine(L["Minimum"], Skada:FormatNumber(spell.hitmin), 1, 1, 1)
 						end
-						tooltip:AddDoubleLine(L["Average"], Skada:FormatNumber(spell.hitamount / spell.hit), 1, 1, 1)
 						if spell.hitmax then
 							tooltip:AddDoubleLine(L["Maximum"], Skada:FormatNumber(spell.hitmax), 1, 1, 1)
 						end
+						tooltip:AddDoubleLine(L["Average"], Skada:FormatNumber(spell.hitamount / spell.hit), 1, 1, 1)
+					elseif label == L["Glancing"] and spell.glance then
+						if spell.glancemin then
+							tooltip:AddDoubleLine(L["Minimum"], Skada:FormatNumber(spell.glancemin), 1, 1, 1)
+						end
+						if spell.glancemax then
+							tooltip:AddDoubleLine(L["Maximum"], Skada:FormatNumber(spell.glancemax), 1, 1, 1)
+						end
+						tooltip:AddDoubleLine(L["Average"], Skada:FormatNumber(spell.glance / spell.glancing), 1, 1, 1)
 					end
 				end
 				return
@@ -120,11 +128,11 @@ Skada:AddLoadableModule("Comparison", function(L)
 						tooltip:AddDoubleLine(L["Minimum"], FormatValueNumber(spell and spell.criticalmin, myspell and myspell.criticalmin, true), 1, 1, 1)
 					end
 
-					tooltip:AddDoubleLine(L["Average"], FormatValueNumber(num, mynum, true), 1, 1, 1)
-
 					if (spell and spell.criticalmax) or (myspell and myspell.criticalmax) then
 						tooltip:AddDoubleLine(L["Maximum"], FormatValueNumber(spell and spell.criticalmax, myspell and myspell.criticalmax, true), 1, 1, 1)
 					end
+
+					tooltip:AddDoubleLine(L["Average"], FormatValueNumber(num, mynum, true), 1, 1, 1)
 				elseif label == L["Normal Hits"] and ((spell and spell.hitamount) or (myspell and myspell.hitamount)) then
 					local num = (spell and spell.hitamount) and (spell.hitamount / spell.hit) or 0
 					local mynum = (myspell and myspell.hitamount) and (myspell.hitamount / myspell.hit) or 0
@@ -133,11 +141,24 @@ Skada:AddLoadableModule("Comparison", function(L)
 						tooltip:AddDoubleLine(L["Minimum"], FormatValueNumber(spell and spell.hitmin, myspell and myspell.hitmin, true), 1, 1, 1)
 					end
 
-					tooltip:AddDoubleLine(L["Average"], FormatValueNumber(num, mynum, true), 1, 1, 1)
-
 					if (spell and spell.hitmax) or (myspell and myspell.hitmax) then
 						tooltip:AddDoubleLine(L["Maximum"], FormatValueNumber(spell and spell.hitmax, myspell and myspell.hitmax, true), 1, 1, 1)
 					end
+
+					tooltip:AddDoubleLine(L["Average"], FormatValueNumber(num, mynum, true), 1, 1, 1)
+				elseif label == L["Glancing"] and ((spell and spell.glance) or (myspell and myspell.glance)) then
+					local num = (spell and spell.glance) and (spell.glance / spell.glancing) or 0
+					local mynum = (myspell and myspell.glance) and (myspell.glance / myspell.glancing) or 0
+
+					if (spell and spell.glancemin) or (myspell and myspell.glancemin) then
+						tooltip:AddDoubleLine(L["Minimum"], FormatValueNumber(spell and spell.glancemin, myspell and myspell.glancemin, true), 1, 1, 1)
+					end
+
+					if (spell and spell.glancemax) or (myspell and myspell.glancemax) then
+						tooltip:AddDoubleLine(L["Maximum"], FormatValueNumber(spell and spell.glancemax, myspell and myspell.glancemax, true), 1, 1, 1)
+					end
+
+					tooltip:AddDoubleLine(L["Average"], FormatValueNumber(num, mynum, true), 1, 1, 1)
 				end
 			end
 		end
@@ -208,20 +229,20 @@ Skada:AddLoadableModule("Comparison", function(L)
 				local nr = add_detail_bar(win, 0, L["Hits"], spell.count, nil, nil, true)
 				win.dataset[nr].value = win.dataset[nr].value + 1 -- to be always first
 
-				if (spell.casts or 0) > 0 then
+				if spell.casts and spell.casts > 0 then
 					nr = add_detail_bar(win, nr, L["Casts"], spell.casts, nil, nil, true)
 					win.dataset[nr].value = win.dataset[nr].value * 1e3 -- to be always first
 				end
 
-				if (spell.hit or 0) > 0 then
+				if spell.hit and spell.hit > 0 then
 					nr = add_detail_bar(win, nr, L["Normal Hits"], spell.hit, nil, nil, true)
 				end
 
-				if (spell.critical or 0) > 0 then
+				if spell.critical and spell.critical > 0 then
 					nr = add_detail_bar(win, nr, L["Critical Hits"], spell.critical, nil, nil, true)
 				end
 
-				if (spell.glancing or 0) > 0 then
+				if spell.glancing and spell.glancing > 0 then
 					nr = add_detail_bar(win, nr, L["Glancing"], spell.glancing, nil, nil, true)
 				end
 
@@ -247,20 +268,20 @@ Skada:AddLoadableModule("Comparison", function(L)
 			local nr = add_detail_bar(win, 0, L["Hits"], spell and spell.count, myspell and myspell.count)
 			win.dataset[nr].value = win.dataset[nr].value + 1 -- to be always first
 
-			if (spell and (spell.casts or 0) > 0) or (myspell and (myspell.casts or 0) > 0) then
+			if (spell and spell.casts and spell.casts > 0) or (myspell and myspell.casts and myspell.casts > 0) then
 				nr = add_detail_bar(win, nr, L["Casts"], spell and spell.casts, myspell and myspell.casts)
 				win.dataset[nr].value = win.dataset[nr].value * 1e3 -- to be always first
 			end
 
-			if (spell and (spell.hit or 0) > 0) or (myspell and (myspell.hit or 0) > 0) then
+			if (spell and spell.hit and spell.hit > 0) or (myspell and myspell.hit and myspell.hit > 0) then
 				nr = add_detail_bar(win, nr, L["Normal Hits"], spell and spell.hit, myspell and myspell.hit)
 			end
 
-			if (spell and (spell.critical or 0) > 0) or (myspell and (myspell.critical or 0) > 0) then
+			if (spell and spell.critical and spell.critical > 0) or (myspell and myspell.critical and myspell.critical > 0) then
 				nr = add_detail_bar(win, nr, L["Critical Hits"], spell and spell.critical, myspell and myspell.critical)
 			end
 
-			if (spell and (spell.glancing or 0) > 0) or (myspell and (myspell.glancing or 0) > 0) then
+			if (spell and spell.glancing and spell.glancing > 0) or (myspell and myspell.glancing and myspell.glancing > 0) then
 				nr = add_detail_bar(win, nr, L["Glancing"], spell and spell.glancing, myspell and myspell.glancing)
 			end
 
@@ -289,7 +310,7 @@ Skada:AddLoadableModule("Comparison", function(L)
 			win.title = format(L["%s's <%s> damage"], actor.name, win.spellname)
 
 			if spell then
-				local absorbed = max(0, spell.total - spell.amount)
+				local absorbed = spell.total and max(0, spell.total - spell.amount) or 0
 				local blocked, resisted = spell.blocked or 0, spell.resisted or 0
 				local total = spell.amount + absorbed + blocked + resisted
 
@@ -308,17 +329,17 @@ Skada:AddLoadableModule("Comparison", function(L)
 				end
 
 				-- overkill damage
-				if (spell.overkill or 0) > 0 then
+				if spell.overkill and spell.overkill > 0 then
 					nr = add_detail_bar(win, nr, L["Overkill"], spell.overkill, nil, true, true)
 				end
 
 				-- blocked damage
-				if (spell.blocked or 0) > 0 then
+				if spell.blocked and spell.blocked > 0 then
 					nr = add_detail_bar(win, nr, L["BLOCK"], spell.blocked, nil, true, true)
 				end
 
 				-- resisted damage
-				if (spell.resisted or 0) > 0 then
+				if spell.resisted and spell.resisted > 0 then
 					nr = add_detail_bar(win, nr, L["RESIST"], spell.resisted, nil, true, true)
 				end
 			end
@@ -330,8 +351,8 @@ Skada:AddLoadableModule("Comparison", function(L)
 		local myspell = myspells and myspells[win.spellname]
 
 		if spell or myspell then
-			local absorbed = spell and max(0, spell.total - spell.amount) or 0
-			local myabsorbed = myspell and max(0, myspell.total - myspell.amount) or 0
+			local absorbed = (spell and spell.total) and max(0, spell.total - spell.amount) or 0
+			local myabsorbed = (myspell and myspell.total) and max(0, myspell.total - myspell.amount) or 0
 			local blocked, myblocked = spell and spell.blocked or 0, myspell and myspell.blocked or 0
 			local resisted, myresisted = spell and spell.resisted or 0, myspell and myspell.resisted or 0
 
@@ -353,17 +374,17 @@ Skada:AddLoadableModule("Comparison", function(L)
 			end
 
 			-- overkill damage
-			if (spell and (spell.overkill or 0) > 0) or (myspell and (myspell.overkill or 0) > 0) then
+			if (spell and spell.overkill and spell.overkill > 0) or (myspell and myspell.overkill and myspell.overkill > 0) then
 				nr = add_detail_bar(win, nr, L["Overkill"], spell and spell.overkill, myspell and myspell.overkill, true)
 			end
 
 			-- blocked damage
-			if (spell and (spell.blocked or 0) > 0) or (myspell and (myspell.blocked or 0) > 0) then
+			if (spell and spell.blocked and spell.blocked > 0) or (myspell and myspell.blocked and myspell.blocked > 0) then
 				nr = add_detail_bar(win, nr, L["BLOCK"], spell and spell.blocked, myspell and myspell.blocked, true)
 			end
 
 			-- resisted damage
-			if (spell and (spell.resisted or 0) > 0) or (myspell and (myspell.resisted or 0) > 0) then
+			if (spell and spell.resisted and spell.resisted > 0) or (myspell and myspell.resisted and myspell.resisted > 0) then
 				nr = add_detail_bar(win, nr, L["RESIST"], spell and spell.resisted, myspell and myspell.resisted, true)
 			end
 		end
@@ -384,9 +405,12 @@ Skada:AddLoadableModule("Comparison", function(L)
 		if actor.id == mod.userGUID then
 			win.title = L["actor damage"](actor.name, win.targetname)
 
-			local total = targets[win.targetname] and targets[win.targetname].amount or 0
-			if Skada.db.profile.absdamage and targets[win.targetname] and targets[win.targetname].total then
-				total = targets[win.targetname].total
+			local total = 0
+			if targets[win.targetname] then
+				total = targets[win.targetname].amount or total
+				if P.absdamage and targets[win.targetname].total then
+					total = targets[win.targetname].total or total
+				end
 			end
 
 			if total > 0 and actor.damagespells then
@@ -407,7 +431,7 @@ Skada:AddLoadableModule("Comparison", function(L)
 						d.spellschool = spell.school
 
 						d.value = spell.targets[win.targetname].amount or 0
-						if Skada.db.profile.absdamage and spell.targets[win.targetname].total then
+						if P.absdamage and spell.targets[win.targetname].total then
 							d.value = spell.targets[win.targetname].total
 						end
 
@@ -423,12 +447,15 @@ Skada:AddLoadableModule("Comparison", function(L)
 			return
 		end
 
-		local mytargets, myself = set:GetActorDamageTargets(mod.userGUID, mod.userName, cacheTable)
+		local mytargets, myself = set:GetActorDamageTargets(mod.userGUID, mod.userName, C)
 
 		-- the compared actor
-		local total = targets[win.targetname] and targets[win.targetname].amount or 0
-		if Skada.db.profile.absdamage and targets[win.targetname] and targets[win.targetname].total then
-			total = targets[win.targetname].total
+		local total = 0
+		if targets[win.targetname] then
+			total = targets[win.targetname].amount or total
+			if P.absdamage and targets[win.targetname].total then
+				total = targets[win.targetname].total or total
+			end
 		end
 
 		-- existing targets.
@@ -449,28 +476,31 @@ Skada:AddLoadableModule("Comparison", function(L)
 					_, _, d.icon = GetSpellInfo(spell.id)
 					d.spellschool = spell.school
 
+					d.value = spell.targets[win.targetname].amount or 0
 					local myamount = 0
-					if Skada.db.profile.absdamage then
-						d.value = spell.targets[win.targetname].total or spell.targets[win.targetname].amount or 0
-						if
-							myself and
-							myself.damagespells and
-							myself.damagespells[spellname] and
-							myself.damagespells[spellname].targets and
-							myself.damagespells[spellname].targets[win.targetname]
-						then
-							myamount = myself.damagespells[spellname].targets[win.targetname].total or myself.damagespells[spellname].targets[win.targetname].amount or 0
+					if
+						myself and
+						myself.damagespells and
+						myself.damagespells[spellname] and
+						myself.damagespells[spellname].targets and
+						myself.damagespells[spellname].targets[win.targetname]
+					then
+						myamount = myself.damagespells[spellname].targets[win.targetname].amount or myamount
+					end
+
+					if P.absdamage then
+						if spell.targets[win.targetname].total then
+							d.value = spell.targets[win.targetname].total
 						end
-					else
-						d.value = spell.targets[win.targetname].amount or 0
 						if
 							myself and
 							myself.damagespells and
 							myself.damagespells[spellname] and
 							myself.damagespells[spellname].targets and
-							myself.damagespells[spellname].targets[win.targetname]
+							myself.damagespells[spellname].targets[win.targetname] and
+							myself.damagespells[spellname].targets[win.targetname].total
 						then
-							myamount = myself.damagespells[spellname].targets[win.targetname].amount or 0
+							myamount = myself.damagespells[spellname].targets[win.targetname].total
 						end
 					end
 
@@ -487,10 +517,14 @@ Skada:AddLoadableModule("Comparison", function(L)
 
 		-- unexisting targets.
 		if mytargets then
-			local mytotal = mytargets[win.targetname] and mytargets[win.targetname].amount or 0
-			if Skada.db.profile.absdamage and mytargets[win.targetname] and mytargets[win.targetname].total then
-				mytotal = mytargets[win.targetname].total
+			local mytotal = 0
+			if mytargets[win.targetname] then
+				mytotal = mytargets[win.targetname].amount or mytotal
+				if P.absdamage and mytargets[win.targetname].total then
+					mytotal = mytargets[win.targetname].total or mytotal
+				end
 			end
+
 			if mytotal > 0 then
 				if win.metadata then
 					win.metadata.maxvalue = 0
@@ -509,7 +543,7 @@ Skada:AddLoadableModule("Comparison", function(L)
 						d.spellschool = spell.school
 
 						local myamount = spell.targets[win.targetname].amount or 0
-						if Skada.db.profile.absdamage and spell.targets[win.targetname].total then
+						if P.absdamage and spell.targets[win.targetname].total then
 							myamount = spell.targets[win.targetname].total
 						end
 
@@ -557,7 +591,7 @@ Skada:AddLoadableModule("Comparison", function(L)
 					d.spellschool = spell.school
 
 					d.value = spell.amount or 0
-					if Skada.db.profile.absdamage and spell.total then
+					if P.absdamage and spell.total then
 						d.value = spell.total
 					end
 
@@ -585,16 +619,18 @@ Skada:AddLoadableModule("Comparison", function(L)
 				_, _, d.icon = GetSpellInfo(spell.id)
 				d.spellschool = spell.school
 
+				d.value = spell.amount or 0
 				local myamount = 0
-				if Skada.db.profile.absdamage then
-					d.value = spell.total or spell.amount or 0
-					if myspells and myspells[spellname] then
-						myamount = myspells[spellname].total or myspells[spellname].amount or 0
+				if myspells and myspells[spellname] then
+					myamount = myspells[spellname].amount or myamount
+				end
+
+				if P.absdamage then
+					if spell.total then
+						d.value = spell.total
 					end
-				else
-					d.value = spell.amount or 0
-					if myspells and myspells[spellname] then
-						myamount = myspells[spellname].amount or 0
+					if myspells and myspells[spellname] and myspells[spellname].total then
+						myamount = myspells[spellname].total
 					end
 				end
 
@@ -618,15 +654,12 @@ Skada:AddLoadableModule("Comparison", function(L)
 						_, _, d.icon = GetSpellInfo(spell.id)
 						d.spellschool = spell.school
 
-						local myamount = 0
-						if Skada.db.profile.absdamage and spell.total then
-							myamount = spell.total
-						else
-							myamount = spell.amount or 0
+						d.value = spell.amount or 0
+						if P.absdamage and spell.total then
+							d.value = spell.total or d.value
 						end
 
-						d.value = myamount
-						d.valuetext = FormatValueNumber(0, myamount, true)
+						d.valuetext = FormatValueNumber(0, d.value, true)
 
 						if win.metadata and d.value > win.metadata.maxvalue then
 							win.metadata.maxvalue = d.value
@@ -668,10 +701,9 @@ Skada:AddLoadableModule("Comparison", function(L)
 					d.role = target.role
 					d.spec = target.spec
 
-					if Skada.db.profile.absdamage and target.total then
-						d.value = target.total
-					else
-						d.value = target.amount or 0
+					d.value = target.amount or 0
+					if P.absdamage and target.total then
+						d.value = target.total or d.value
 					end
 
 					d.valuetext = Skada:FormatValueCols(mod.metadata.columns.Damage and Skada:FormatNumber(d.value))
@@ -684,7 +716,7 @@ Skada:AddLoadableModule("Comparison", function(L)
 			end
 
 			-- collect compared actor's targets.
-			local mytargets = set:GetActorDamageTargets(mod.userGUID, mod.userName, cacheTable)
+			local mytargets = set:GetActorDamageTargets(mod.userGUID, mod.userName, C)
 
 			-- iterate comparison actor's targets.
 			for targetname, target in pairs(targets) do
@@ -697,16 +729,18 @@ Skada:AddLoadableModule("Comparison", function(L)
 				d.role = target.role
 				d.spec = target.spec
 
+				d.value = target.amount or 0
 				local myamount = 0
-				if Skada.db.profile.absdamage then
-					d.value = target.total or target.amount or 0
-					if mytargets and mytargets[targetname] then
-						myamount = mytargets[targetname].amount or mytargets[targetname].amount or 0
+				if mytargets and mytargets[targetname] then
+					myamount = mytargets[targetname].amount or myamount
+				end
+
+				if P.absdamage then
+					if target.total then
+						d.value = target.total
 					end
-				else
-					d.value = target.amount or 0
-					if mytargets and mytargets[targetname] then
-						myamount = mytargets[targetname].amount or 0
+					if mytargets and mytargets[targetname] and mytargets[targetname].total then
+						myamount = mytargets[targetname].total
 					end
 				end
 
@@ -730,15 +764,12 @@ Skada:AddLoadableModule("Comparison", function(L)
 						d.role = target.role
 						d.spec = target.spec
 
-						local myamount = 0
-						if Skada.db.profile.absdamage and target.total then
-							myamount = target.total
-						else
-							myamount = target.amount or 0
+						d.value = target.amount or 0
+						if P.absdamage and target.total then
+							d.value = target.total
 						end
 
-						d.value = myamount
-						d.valuetext = FormatValueNumber(0, myamount, true, actor.id == mod.userGUID)
+						d.valuetext = FormatValueNumber(0, d.value, true, actor.id == mod.userGUID)
 
 						if win.metadata and d.value > win.metadata.maxvalue then
 							win.metadata.maxvalue = d.value
@@ -802,9 +833,9 @@ Skada:AddLoadableModule("Comparison", function(L)
 		end
 	end
 
-	function mod:SetActor(win, id, label)
+	local function SetActor(_, win, id, label)
 		-- no DisplayMode func?
-		if not win.DisplayMode then return end
+		if not win or not win.DisplayMode then return end
 
 		-- same actor or me? reset to the player
 		if id == Skada.userGUID or (id == mod.userGUID and win.selectedmode == mod) then
@@ -842,24 +873,22 @@ Skada:AddLoadableModule("Comparison", function(L)
 			post_tooltip = activity_tooltip,
 			click1 = spellmod,
 			click2 = targetmod,
-			click3 = self.SetActor,
+			click3 = SetActor,
 			click3_label = L["Damage Comparison"],
 			columns = {Damage = true, DPS = true, Comparison = true, Percent = true},
 			icon = [[Interface\Icons\Ability_Warrior_OffensiveStance]]
 		}
 
 		-- no total click.
+		self.nototal = true
 		spellmod.nototal = true
 		targetmod.nototal = true
 
-		self.userGUID = Skada.userGUID
-		self.userName = Skada.userName
-		self.userClass = Skada.userClass
+		self.category = parent.category or L["Damage Done"]
+		Skada:AddColumnOptions(self)
 
-		Skada:AddMode(self, L["Damage Done"])
-	end
-
-	function mod:OnDisable()
-		Skada:RemoveMode(self)
+		parent.metadata.click3 = SetActor
+		parent.metadata.click3_label = L["Damage Comparison"]
+		parent:Reload()
 	end
 end)

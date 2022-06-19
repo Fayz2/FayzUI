@@ -1,8 +1,8 @@
 local Skada = Skada
-Skada:AddLoadableModule("Tweaks", function(L)
+Skada:RegisterModule("Tweaks", function(L, P, _, _, new, del)
 	if Skada:IsDisabled("Tweaks") then return end
 
-	local mod = Skada:NewModule(L["Tweaks"], "AceHook-3.0")
+	local mod = Skada:NewModule("Tweaks", "AceHook-3.0")
 	local ignoredSpells = Skada.dummyTable -- Edit Skada\Core\Tables.lua
 
 	local band, format = bit.band, string.format
@@ -11,25 +11,25 @@ Skada:AddLoadableModule("Tweaks", function(L)
 	local GetSpellLink = Skada.GetSpellLink or GetSpellLink
 	local _
 
-	local BITMASK_GROUP = Skada.BITMASK_GROUP
-	if not BITMASK_GROUP then
-		local COMBATLOG_OBJECT_AFFILIATION_MINE = COMBATLOG_OBJECT_AFFILIATION_MINE or 0x00000001
-		local COMBATLOG_OBJECT_AFFILIATION_PARTY = COMBATLOG_OBJECT_AFFILIATION_PARTY or 0x00000002
-		local COMBATLOG_OBJECT_AFFILIATION_RAID = COMBATLOG_OBJECT_AFFILIATION_RAID or 0x00000004
-		BITMASK_GROUP = COMBATLOG_OBJECT_AFFILIATION_MINE + COMBATLOG_OBJECT_AFFILIATION_PARTY + COMBATLOG_OBJECT_AFFILIATION_RAID
-		Skada.BITMASK_GROUP = BITMASK_GROUP
-	end
-
 	local channel_events, considerFoF, fofrostmourne
 
 	---------------------------------------------------------------------------
 	-- CombatLogEvent Hook
 
 	do
+		local BITMASK_GROUP = Skada.BITMASK_GROUP
+		if not BITMASK_GROUP then
+			local COMBATLOG_OBJECT_AFFILIATION_MINE = COMBATLOG_OBJECT_AFFILIATION_MINE or 0x00000001
+			local COMBATLOG_OBJECT_AFFILIATION_PARTY = COMBATLOG_OBJECT_AFFILIATION_PARTY or 0x00000002
+			local COMBATLOG_OBJECT_AFFILIATION_RAID = COMBATLOG_OBJECT_AFFILIATION_RAID or 0x00000004
+			BITMASK_GROUP = COMBATLOG_OBJECT_AFFILIATION_MINE + COMBATLOG_OBJECT_AFFILIATION_PARTY + COMBATLOG_OBJECT_AFFILIATION_RAID
+			Skada.BITMASK_GROUP = BITMASK_GROUP
+		end
+
 		local MAX_BOSS_FRAMES = MAX_BOSS_FRAMES or 5
 		local T = Skada.Table
 		local firsthit, firsthittimer = T.get("Skada_FirstHit"), nil
-		local hitformats = {"%s (%s)", "%s (|c%s%s|r)", "|c%s%s|r", "|c%s%s|r (%s)"}
+		local hitformats = {"%s (%s)", "%s (\124c%s%s\124r)", "\124c%s%s\124r", "\124c%s%s\124r (%s)"}
 
 		-- thank you Details!
 		local Skada_CombatLogEvent = Skada.CombatLogEvent
@@ -45,11 +45,10 @@ Skada:AddLoadableModule("Tweaks", function(L)
 		do
 			local tconcat = table.concat
 			local UnitExists, UnitName = UnitExists, UnitName
-			local new, del = Skada.newTable, Skada.delTable
 
 			function WhoPulled(hitline)
 				-- first hit
-				hitline = hitline or L["|cffffbb00First Hit|r: *?*"]
+				hitline = hitline or L["\124cffffbb00First Hit\124r: *?*"]
 
 				-- firt boss target
 				local targetline = nil
@@ -74,7 +73,7 @@ Skada:AddLoadableModule("Tweaks", function(L)
 				end
 
 				if targettable then
-					targetline = format(L["|cffffbb00Boss First Target|r: %s"], tconcat(targettable, " \124\124 "))
+					targetline = format(L["\124cffffbb00Boss First Target\124r: %s"], tconcat(targettable, " \124\124 "))
 					targettable = del(targettable)
 				end
 
@@ -100,20 +99,20 @@ Skada:AddLoadableModule("Tweaks", function(L)
 					end
 				end
 				-- ignore the spell
-				if self.db.profile.fofrostmourne then return end
+				if P.fofrostmourne then return end
 			end
 
 			-- first hit
 			if
-				self.db.profile.firsthit and
-				firsthit.hitline == nil and
+				P.firsthit and
+				firsthit.checked == nil and
 				trigger_events[eventtype] and
 				srcName and dstName and
 				not ignoredSpells[spellid]
 			then
 				local output -- initial output
 
-				if band(dstFlags, BITMASK_GROUP) ~= 0 and self:IsBoss(srcGUID, srcName) then -- boss started?
+				if band(dstFlags, BITMASK_GROUP) ~= 0 and self:IsBoss(srcGUID) then -- boss started?
 					if self:IsPet(dstGUID, dstFlags) then
 						output = format(hitformats[1], srcName, dstName or L["Unknown"])
 					elseif dstName then
@@ -126,7 +125,7 @@ Skada:AddLoadableModule("Tweaks", function(L)
 					else
 						output = srcName
 					end
-				elseif band(srcFlags, BITMASK_GROUP) ~= 0 and self:IsBoss(dstGUID, dstName) then -- a player started?
+				elseif band(srcFlags, BITMASK_GROUP) ~= 0 and self:IsBoss(dstGUID) then -- a player started?
 					local owner = self:GetPetOwner(srcGUID)
 					if owner then
 						local _, class = UnitClass(owner.name)
@@ -147,8 +146,9 @@ Skada:AddLoadableModule("Tweaks", function(L)
 
 				if output then
 					local spell = (eventtype == "SWING_DAMAGE") and GetSpellLink(6603) or GetSpellLink(spellid) or GetSpellInfo(spellid)
-					firsthit.hitline, firsthit.targetline = WhoPulled(format(L["|cffffff00First Hit|r: %s from %s"], spell or "", output))
+					firsthit.hitline, firsthit.targetline = WhoPulled(format(L["\124cffffff00First Hit\124r: %s from %s"], spell or "", output))
 				end
+				firsthit.checked = true -- once only
 			end
 
 			-- use the original function
@@ -249,16 +249,16 @@ Skada:AddLoadableModule("Tweaks", function(L)
 				if line and msg:match(line) then
 					local newID = 0
 					local curtime = GetTime()
-					if find(msg, "|cff(.+)|r") then
-						msg = gsub(msg, "|cff%w%w%w%w%w%w", "")
-						msg = gsub(msg, "|r", "")
+					if find(msg, "\124cff(.+)\124r") then
+						msg = gsub(msg, "\124cff%w%w%w%w%w%w", "")
+						msg = gsub(msg, "\124r", "")
 					end
 					for j = 1, #meters do
 						local meter = meters[j]
 						local elapsed = meter and (curtime - meter.time) or 0
 						if meter and meter.src == source and meter.evt == event and elapsed < 1 then
 							newID = j
-							return true, true, format("|HSKSP:%1$d|h|cffffff00[%2$s]|r|h", newID or 0, msg or "nil")
+							return true, true, format("\124HSKSP:%1$d\124h\124cffffff00[%2$s]\124r\124h", newID or 0, msg or "nil")
 						end
 					end
 					meters[#meters + 1] = {src = source, evt = event, time = curtime, data = {}, title = msg}
@@ -268,7 +268,7 @@ Skada:AddLoadableModule("Tweaks", function(L)
 							newID = j
 						end
 					end
-					return true, true, format("|HSKSP:%1$d|h|cffffff00[%2$s]|r|h", newID or 0, msg or "nil")
+					return true, true, format("\124HSKSP:%1$d\124h\124cffffff00[%2$s]\124r\124h", newID or 0, msg or "nil")
 				end
 			end
 
@@ -359,7 +359,7 @@ Skada:AddLoadableModule("Tweaks", function(L)
 			-- was the last combat event within a second of cast succeeding?
 			if self.lastEvent and (GetTime() - self.lastEvent) <= 1 then return end
 
-			if Skada.db.profile.combatlogfixverbose then
+			if P.combatlogfixverbose then
 				if not self.throttle or self.throttle < GetTime() then
 					Skada:Printf(
 						L["%d filtered / %d events found. Cleared combat log, as it broke."],
@@ -392,16 +392,16 @@ Skada:AddLoadableModule("Tweaks", function(L)
 			end
 		end
 
-		function mod:COMBAT_PLAYER_ENTER()
-			if Skada.db.profile.combatlogfix then
+		function mod:CombatEnter()
+			if P.combatlogfix then
 				Skada:ScheduleTimer(CombatLogClearEntries, 0.01)
 			end
 		end
 
 		function mod:CombatLogFix()
-			if Skada.db.profile.combatlogfix then
+			if P.combatlogfix then
 				frame = frame or CreateFrame("Frame")
-				if Skada.db.profile.combatlogfixalt then
+				if P.combatlogfixalt then
 					frame:UnregisterAllEvents()
 					frame.timeout = 0
 					frame:SetScript("OnUpdate", AggressiveOnUpdate)
@@ -426,7 +426,7 @@ Skada:AddLoadableModule("Tweaks", function(L)
 					frame:Hide()
 				end
 
-				Skada.RegisterMessage(self, "COMBAT_PLAYER_ENTER")
+				Skada.RegisterMessage(self, "COMBAT_PLAYER_ENTER", "CombatEnter")
 			else
 				if frame then
 					frame:UnregisterAllEvents()
@@ -435,38 +435,100 @@ Skada:AddLoadableModule("Tweaks", function(L)
 					frame:Hide()
 					frame = nil
 				end
-				Skada.UnregisterMessage(self, "COMBAT_PLAYER_ENTER")
+				Skada.UnregisterMessage(self, "COMBAT_PLAYER_ENTER", "CombatEnter")
+			end
+		end
+	end
+
+	---------------------------------------------------------------------------
+	-- Smart stop
+
+	do
+		-- list of creature IDs to be ignored
+		local ignoredBosses = {
+			[37217] = true, -- Precious
+			[37025] = true -- Stinky
+		}
+
+		function mod:BossDefeated(_, set)
+			if set and not set.stopped and set.gotboss and not ignoredBosses[set.gotboss] then
+				Skada:ScheduleTimer(function()
+					if not set.endtime then
+						Skada:StopSegment(L["Smart Stop"])
+					end
+				end,
+				P.smartwait or 3)
 			end
 		end
 	end
 
 	---------------------------------------------------------------------------
 
+	function mod:ApplySettings()
+		-- First Hit!
+		if P.firsthit then
+			Skada.RegisterMessage(self, "COMBAT_ENCOUNTER_START", "PrintFirstHit")
+			Skada.RegisterMessage(self, "COMBAT_ENCOUNTER_END", "ClearFirstHit")
+		else
+			Skada.UnregisterMessage(self, "COMBAT_ENCOUNTER_START")
+			Skada.UnregisterMessage(self, "COMBAT_ENCOUNTER_END")
+		end
+
+		-- fury of frostmourne
+		fofrostmourne = fofrostmourne or GetSpellInfo(72350)
+		considerFoF = not Skada.Ascension
+
+		-- smart stop
+		if P.smartstop then
+			Skada.RegisterMessage(self, "COMBAT_BOSS_DEFEATED", "BossDefeated")
+		else
+			Skada.UnregisterMessage(self, "COMBAT_BOSS_DEFEATED")
+		end
+
+		-- filter dps meters
+		if P.spamage then
+			if not self:IsHooked("SetItemRef") then
+				self:RawHook("SetItemRef", "ParseLink", true)
+			end
+			for i = 1, #channel_events do
+				ChatFrame_AddMessageEventFilter(channel_events[i], self.ParseChatEvent)
+			end
+		elseif self:IsHooked("SetItemRef") then
+			self:Unhook("SetItemRef")
+			for i = 1, #channel_events do
+				ChatFrame_RemoveMessageEventFilter(channel_events[i], self.ParseChatEvent)
+			end
+		end
+
+		-- combatlog fix
+		self:CombatLogFix()
+	end
+
 	do
 		local function SetValue(i, val)
-			Skada.db.profile[i[#i]] = val
+			P[i[#i]] = val
 			mod:ApplySettings()
 		end
 
 		function mod:OnInitialize()
 			-- first hit.
-			if Skada.db.profile.firsthit == nil then
-				Skada.db.profile.firsthit = true
+			if P.firsthit == nil then
+				P.firsthit = true
 			end
 			-- smart stop & duration
-			if Skada.db.profile.smartstop == nil then
+			if P.smartstop == nil then
 			end
-			if Skada.db.profile.smartwait == nil then
-				Skada.db.profile.smartwait = 3
+			if P.smartwait == nil then
+				P.smartwait = 3
 			end
 			-- combatlog fix
-			if Skada.db.profile.combatlogfix == nil then
-				Skada.db.profile.combatlogfix = true
+			if P.combatlogfix == nil then
+				P.combatlogfix = true
 			end
 
 			-- old spamage module
-			if type(Skada.db.profile.spamage) == "table" then
-				Skada.db.profile.spamage = nil
+			if type(P.spamage) == "table" then
+				P.spamage = nil
 			end
 
 			-- Fury of Frostmourne
@@ -497,7 +559,7 @@ Skada:AddLoadableModule("Tweaks", function(L)
 			Skada.options.args.tweaks.args.general.args.fofrostmourne = {
 				type = "toggle",
 				name = fofrostmourne,
-				desc = format(L["Enable this if you want to ignore |cffffbb00%s|r."], fofrostmourne),
+				desc = format(L["Enable this if you want to ignore \124cffffbb00%s\124r."], fofrostmourne),
 				hidden = Skada.Ascension,
 				set = SetValue,
 				order = 40
@@ -527,7 +589,7 @@ Skada:AddLoadableModule("Tweaks", function(L)
 						name = L["Duration"],
 						desc = L["opt_tweaks_smartwait_desc"],
 						disabled = function()
-							return not Skada.db.profile.smartstop
+							return not P.smartstop
 						end,
 						min = 0,
 						max = 10,
@@ -562,7 +624,7 @@ Skada:AddLoadableModule("Tweaks", function(L)
 						name = L["Aggressive Mode"],
 						desc = L["opt_tweaks_combatlogfixalt_desc"],
 						disabled = function()
-							return not Skada.db.profile.combatlogfix
+							return not P.combatlogfix
 						end,
 						order = 30
 					},
@@ -571,75 +633,13 @@ Skada:AddLoadableModule("Tweaks", function(L)
 						name = L["Verbose Mode"],
 						desc = format(L["Enable verbose mode for %s."], L["Combat Log"]),
 						disabled = function()
-							return Skada.db.profile.combatlogfixalt or not Skada.db.profile.combatlogfix
+							return P.combatlogfixalt or not P.combatlogfix
 						end,
 						order = 40
 					}
 				}
 			}
 		end
-	end
-
-	---------------------------------------------------------------------------
-	-- Smart stop
-
-	do
-		-- list of creature IDs to be ignored
-		local ignoredBosses = {
-			[37217] = true, -- Precious
-			[37025] = true -- Stinky
-		}
-
-		function mod:BossDefeated(_, set)
-			if set and not set.stopped and set.gotboss and not ignoredBosses[set.gotboss] then
-				Skada:ScheduleTimer(function()
-					if not set.endtime then
-						Skada:StopSegment(L["Smart Stop"])
-					end
-				end,
-				Skada.db.profile.smartwait or 3)
-			end
-		end
-	end
-
-	function mod:ApplySettings()
-		-- First Hit!
-		if Skada.db.profile.firsthit then
-			Skada.RegisterMessage(self, "COMBAT_ENCOUNTER_START", "PrintFirstHit")
-			Skada.RegisterMessage(self, "COMBAT_ENCOUNTER_END", "ClearFirstHit")
-		else
-			Skada.UnregisterMessage(self, "COMBAT_ENCOUNTER_START")
-			Skada.UnregisterMessage(self, "COMBAT_ENCOUNTER_END")
-		end
-
-		-- fury of frostmourne
-		fofrostmourne = fofrostmourne or GetSpellInfo(72350)
-		considerFoF = not Skada.Ascension
-
-		-- smart stop
-		if Skada.db.profile.smartstop then
-			Skada.RegisterMessage(self, "COMBAT_BOSS_DEFEATED", "BossDefeated")
-		else
-			Skada.UnregisterMessage(self, "COMBAT_BOSS_DEFEATED")
-		end
-
-		-- filter dps meters
-		if Skada.db.profile.spamage then
-			if not self:IsHooked("SetItemRef") then
-				self:RawHook("SetItemRef", "ParseLink", true)
-			end
-			for i = 1, #channel_events do
-				ChatFrame_AddMessageEventFilter(channel_events[i], self.ParseChatEvent)
-			end
-		elseif self:IsHooked("SetItemRef") then
-			self:Unhook("SetItemRef")
-			for i = 1, #channel_events do
-				ChatFrame_RemoveMessageEventFilter(channel_events[i], self.ParseChatEvent)
-			end
-		end
-
-		-- combatlog fix
-		self:CombatLogFix()
 	end
 
 	function mod:OnEnable()

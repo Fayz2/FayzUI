@@ -4,11 +4,12 @@
 -- @author: Kader B (https://github.com/bkader/LibCompat-1.0)
 --
 
-local MAJOR, MINOR = "LibCompat-1.0-Skada", 31
+local MAJOR, MINOR = "LibCompat-1.0-Skada", 33
 local lib, oldminor = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end
 
 lib.embeds = lib.embeds or {}
+lib.EmptyFunc = Multibar_EmptyFunc
 
 local pairs, ipairs, select, type = pairs, ipairs, select, type
 local tconcat, wipe = table.concat, wipe
@@ -19,25 +20,35 @@ local setmetatable = setmetatable
 local error = error
 local _
 
-local QuickDispatch
+local Dispatch
 local IsInGroup, IsInRaid
 local GetUnitIdFromGUID
 local tLength
+
 -------------------------------------------------------------------------------
 
 do
 	local pcall = pcall
 
-	function QuickDispatch(func, ...)
+	function Dispatch(func, ...)
+		if type(func) ~= "function" then
+			print("\124cffff9900Error\124r: Dispatch requires a function.")
+			return
+		end
+		return func(...)
+	end
+
+	local function QuickDispatch(func, ...)
 		if type(func) ~= "function" then return end
 		local ok, err = pcall(func, ...)
 		if not ok then
-			print("|cffff9900Error|r:" .. (err or "<no error given>"))
+			print("\124cffff9900Error\124r:" .. (err or "<no error given>"))
 			return
 		end
 		return true
 	end
 
+	lib.Dispatch = Dispatch
 	lib.QuickDispatch = QuickDispatch
 end
 
@@ -46,8 +57,10 @@ end
 do
 	function tLength(tbl)
 		local len = 0
-		for _ in pairs(tbl) do
-			len = len + 1
+		if tbl then
+			for _ in pairs(tbl) do
+				len = len + 1
+			end
 		end
 		return len
 	end
@@ -217,7 +230,18 @@ do
 			return nil
 		end
 
-		return new, del
+		-- optional function used to wipe a table that contains
+		-- other reusable tables.
+		local function clear(t, recursive)
+			if type(t) == "table" then
+				for k, v in pairs(t) do
+					t[k] = del(v, recursive)
+				end
+			end
+			return t
+		end
+
+		return new, del, clear
 	end
 end
 
@@ -346,7 +370,7 @@ do
 
 	local function GroupIterator(func, ...)
 		for unit, owner in UnitIterator() do
-			QuickDispatch(func, unit, owner, ...)
+			Dispatch(func, unit, owner, ...)
 		end
 	end
 
@@ -506,54 +530,46 @@ end
 
 do
 	local classColorsTable, classCoordsTable
-	local classColors = CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS
 
 	-- flags for Projects Ascension
 	lib.Ascension = (type(IsCoA) == "function")
 	lib.AscensionCoA = lib.Ascension and IsCoA()
 
-	-- the functions below are for internal usage only
-	local function __fillClassColorsTable()
-		classColorsTable = {}
-		for class, tbl in pairs(classColors) do
-			classColorsTable[class] = tbl
-			classColorsTable[class].colorStr = RGBPercToHex(tbl.r, tbl.g, tbl.b, true)
-			classColorsTable[class].className = LOCALIZED_CLASS_NAMES_MALE[class] or UNKNOWN
-		end
-	end
-
-	-- fills class coordinates table
-	local function __fillClassCoordsTable()
-		classCoordsTable = {}
-		-- for Project Ascension!
-		if lib.AscensionCoA then
-			-- original wow classes
-			classCoordsTable.WARRIOR = {0.25, 0.375, 0.5, 0.625}
-			classCoordsTable.MAGE = {0.375, 0.5, 0.5, 0.625}
-			classCoordsTable.ROGUE = {0, 0.125, 0.625, 0.75}
-			classCoordsTable.DRUID = {0.125, 0.25, 0.625, 0.75}
-			classCoordsTable.HUNTER = {0.25, 0.375, 0.625, 0.75}
-			classCoordsTable.SHAMAN = {0.375, 0.5, 0.625, 0.75}
-			classCoordsTable.PRIEST = {0, 0.125, 0.75, 0.875}
-			classCoordsTable.WARLOCK = {0.125, 0.25, 0.75, 0.875}
-			classCoordsTable.PALADIN = {0.25, 0.375, 0.75, 0.875}
-			classCoordsTable.DEATHKNIGHT = {0.375, 0.5, 0.75, 0.875}
-		end
-		for class, coords in pairs(CLASS_ICON_TCOORDS) do
-			-- skip original classes for Ascension CoA
-			if not classCoordsTable[class] then
-				classCoordsTable[class] = coords
+	local function GetClassColorsTable()
+		-- fill class colors table.
+		if classColorsTable == nil then
+			classColorsTable = {}
+			for class, tbl in pairs(CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS) do
+				classColorsTable[class] = tbl
+				classColorsTable[class].colorStr = RGBPercToHex(tbl.r, tbl.g, tbl.b, true)
+				classColorsTable[class].className = LOCALIZED_CLASS_NAMES_MALE[class] or UNKNOWN
 			end
 		end
-	end
 
-	local function GetClassColorsTable()
-		if classColorsTable == nil then
-			__fillClassColorsTable()
-		end
+		-- fill class coords table
 		if classCoordsTable == nil then
-			__fillClassCoordsTable()
+			classCoordsTable = {}
+			if lib.AscensionCoA then -- for Project Ascension!
+				-- original wow classes
+				classCoordsTable.WARRIOR = {0.25, 0.375, 0.5, 0.625}
+				classCoordsTable.MAGE = {0.375, 0.5, 0.5, 0.625}
+				classCoordsTable.ROGUE = {0, 0.125, 0.625, 0.75}
+				classCoordsTable.DRUID = {0.125, 0.25, 0.625, 0.75}
+				classCoordsTable.HUNTER = {0.25, 0.375, 0.625, 0.75}
+				classCoordsTable.SHAMAN = {0.375, 0.5, 0.625, 0.75}
+				classCoordsTable.PRIEST = {0, 0.125, 0.75, 0.875}
+				classCoordsTable.WARLOCK = {0.125, 0.25, 0.75, 0.875}
+				classCoordsTable.PALADIN = {0.25, 0.375, 0.75, 0.875}
+				classCoordsTable.DEATHKNIGHT = {0.375, 0.5, 0.75, 0.875}
+			end
+			for class, coords in pairs(CLASS_ICON_TCOORDS) do
+				-- skip original classes for Ascension CoA
+				if not classCoordsTable[class] then
+					classCoordsTable[class] = coords
+				end
+			end
 		end
+
 		return classColorsTable, classCoordsTable
 	end
 
@@ -735,15 +751,53 @@ end
 
 do
 	local function WrapTextInColorCode(text, colorHexString)
-		return format("|c%s%s|r", colorHexString, text)
+		return format("\124c%s%s\124r", colorHexString, text)
 	end
 
 	lib.WrapTextInColorCode = WrapTextInColorCode
 end
 
 -------------------------------------------------------------------------------
+-- Save/Restore frame positions to/from db
+
+do
+	local floor = math.floor
+	local GetScreenWidth, GetScreenHeight = GetScreenWidth, GetScreenHeight
+
+	local function SavePosition(self, db)
+		if self and self.GetCenter and db then
+			local x, y = self:GetCenter()
+			local scale = self:GetEffectiveScale()
+			local uscale = UIParent:GetScale()
+
+			db.x = ((x * scale) - (GetScreenWidth() * uscale) / 2) / uscale
+			db.y = ((y * scale) - (GetScreenHeight() * uscale) / 2) / uscale
+			db.scale = floor(self:GetScale() * 100) / 100
+		end
+	end
+
+	local function RestorePosition(self, db)
+		if self and self.SetPoint and db then
+			local scale = self:GetEffectiveScale()
+			local uscale = UIParent:GetScale()
+			local x = (db.x or 0) * uscale / scale
+			local y = (db.y or 0) * uscale / scale
+
+			self:ClearAllPoints()
+			self:SetPoint("CENTER", UIParent, "CENTER", x, y)
+			self:SetScale(db.scale or 1)
+		end
+	end
+
+	lib.SavePosition = SavePosition
+	lib.RestorePosition = RestorePosition
+end
+
+-------------------------------------------------------------------------------
 
 local mixins = {
+	"EmptyFunc",
+	"Dispatch",
 	"QuickDispatch",
 	-- table util
 	"tLength",
@@ -778,7 +832,10 @@ local mixins = {
 	"HexDecode",
 	"EscapeStr",
 	"GetClassColorsTable",
-	"WrapTextInColorCode"
+	"WrapTextInColorCode",
+	-- frame position
+	"SavePosition",
+	"RestorePosition"
 }
 
 function lib:Embed(target)

@@ -1,10 +1,10 @@
 local Skada = Skada
 if Skada.Ascension then return end -- skipped on ascension
-Skada:AddLoadableModule("Parry-Haste", function(L)
+Skada:RegisterModule("Parry-Haste", function(L, P)
 	if Skada:IsDisabled("Parry-Haste") then return end
 
-	local mod = Skada:NewModule(L["Parry-Haste"])
-	local targetmod = mod:NewModule(L["Parry target list"])
+	local mod = Skada:NewModule("Parry-Haste")
+	local targetmod = mod:NewModule("Parry target list")
 
 	local pairs, tostring, format = pairs, tostring, string.format
 
@@ -31,12 +31,12 @@ Skada:AddLoadableModule("Parry-Haste", function(L)
 			set.parry = (set.parry or 0) + 1
 
 			-- saving this to total set may become a memory hog deluxe.
-			if (set ~= Skada.total or Skada.db.profile.totalidc) and data.dstName then
+			if (set ~= Skada.total or P.totalidc) and data.dstName then
 				player.parrytargets = player.parrytargets or {}
 				player.parrytargets[data.dstName] = (player.parrytargets[data.dstName] or 0) + 1
 
-				if Skada.db.profile.modules.parryannounce and set ~= Skada.total then
-					Skada:SendChat(format(L["%s parried %s (%s)"], data.dstName, data.playername, player.parrytargets[data.dstName] or 1), Skada.db.profile.modules.parrychannel, "preset")
+				if P.modules.parryannounce and set ~= Skada.total then
+					Skada:SendChat(format(L["%s parried %s (%s)"], data.dstName, data.playername, player.parrytargets[data.dstName] or 1), P.modules.parrychannel, "preset")
 				end
 			end
 		end
@@ -163,21 +163,22 @@ Skada:AddLoadableModule("Parry-Haste", function(L)
 	end
 
 	function mod:GetSetSummary(set)
-		return tostring(set.parry or 0), set.parry or 0
+		local parries = set.parry or 0
+		return tostring(parries), parries
 	end
 
 	function mod:OnInitialize()
-		if not Skada.db.profile.modules.parrychannel then
-			Skada.db.profile.modules.parrychannel = "AUTO"
+		if not P.modules.parrychannel then
+			P.modules.parrychannel = "AUTO"
 		end
 		Skada.options.args.modules.args.Parry = {
 			type = "group",
-			name = self.moduleName,
-			desc = format(L["Options for %s."], self.moduleName),
+			name = self.localeName,
+			desc = format(L["Options for %s."], self.localeName),
 			args = {
 				header = {
 					type = "description",
-					name = self.moduleName,
+					name = self.localeName,
 					fontSize = "large",
 					image = [[Interface\Icons\ability_parry]],
 					imageWidth = 18,
@@ -194,7 +195,7 @@ Skada:AddLoadableModule("Parry-Haste", function(L)
 				},
 				parryannounce = {
 					type = "toggle",
-					name = format(L["Announce %s"], self.moduleName),
+					name = format(L["Announce %s"], self.localeName),
 					order = 10,
 					width = "double"
 				},

@@ -2,7 +2,7 @@
 -- Specialized ( = enhanced) for Skada
 -- Note to self: don't forget to notify original author of changes
 -- in the unlikely event they end up being usable outside of Skada.
-local MAJOR, MINOR = "SpecializedLibBars-1.0", 90007
+local MAJOR, MINOR = "SpecializedLibBars-1.0", 90013
 local lib, oldminor = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end -- No Upgrade needed.
 
@@ -15,7 +15,8 @@ local GetTime = GetTime
 local sin, cos, rad = math.sin, math.cos, math.rad
 local abs, min, max, floor = math.abs, math.min, math.max, math.floor
 local tsort, tinsert, tremove, tconcat, wipe = table.sort, tinsert, tremove, table.concat, wipe
-local next, pairs, assert, error, type, xpcall = next, pairs, assert, error, type, xpcall
+local next, pairs, error, type, xpcall = next, pairs, error, type, xpcall
+local CreateFrame = CreateFrame
 local GameTooltip = GameTooltip
 local GetScreenWidth = GetScreenWidth
 local GetScreenHeight = GetScreenHeight
@@ -23,67 +24,113 @@ local GetScreenHeight = GetScreenHeight
 -------------------------------------------------------------------------------
 -- localization
 
-local L = {
-	resize_header = "Resize",
-	resize_click = "|cff00ff00Click|r to freely resize window.",
-	resize_shift_click = "|cff00ff00Shift-Click|r to change the width.",
-	resize_alt_click = "|cff00ff00Alt-Click|r to change the height.",
-	lock_window = "Lock Window",
-	unlock_window = "Unlock Window"
-}
+local L_RESIZE_HEADER = "Resize"
+local L_RESIZE_CLICK = "\124cff00ff00Click\124r to freely resize window."
+local L_RESIZE_SHIFT_CLICK = "\124cff00ff00Shift-Click\124r to change the width."
+local L_RESIZE_ALT_CLICK = "\124cff00ff00Alt-Click\124r to change the height."
+local L_LOCK_WINDOW = "Lock Window"
+local L_UNLOCK_WINDOW = "Unlock Window"
+
 if LOCALE_deDE then
-	L["resize_header"] = "Größe ändern"
-	L["resize_click"] = "|cff00ff00Klicken|r, um die Fenstergröße frei zu ändern."
-	L["resize_shift_click"] = "|cff00ff00Umschalt-Klick|r, um die Breite zu ändern."
-	L["resize_alt_click"] = "|cff00ff00Alt-Klick|r, um die Höhe zu ändern."
-	L["lock_window"] = "Fenster sperren"
-	L["unlock_window"] = "Fenster entsperren"
+	L_RESIZE_HEADER = "Größe ändern"
+	L_RESIZE_CLICK = "\124cff00ff00Klicken\124r, um die Fenstergröße frei zu ändern."
+	L_RESIZE_SHIFT_CLICK = "\124cff00ff00Umschalt-Klick\124r, um die Breite zu ändern."
+	L_RESIZE_ALT_CLICK = "\124cff00ff00Alt-Klick\124r, um die Höhe zu ändern."
+	L_LOCK_WINDOW = "Fenster sperren"
+	L_UNLOCK_WINDOW = "Fenster entsperren"
 elseif LOCALE_esES or LOCALE_esMX then
-	L["resize_header"] = "Redimensionar"
-	L["resize_click"] = "|cff00ff00Haga clic|r para cambiar el tamaño de la ventana."
-	L["resize_shift_click"] = "|cff00ff00Shift-Click|r para cambiar el ancho de la ventana."
-	L["resize_alt_click"] = "|cff00ff00Alt-Click|r para cambiar la altura de la ventana."
-	L["lock_window"] = "Bloquear ventana"
-	L["unlock_window"] = "Desbloquear ventana"
+	L_RESIZE_HEADER = "Redimensionar"
+	L_RESIZE_CLICK = "\124cff00ff00Haga clic\124r para cambiar el tamaño de la ventana."
+	L_RESIZE_SHIFT_CLICK = "\124cff00ff00Shift-Click\124r para cambiar el ancho de la ventana."
+	L_RESIZE_ALT_CLICK = "\124cff00ff00Alt-Click\124r para cambiar la altura de la ventana."
+	L_LOCK_WINDOW = "Bloquear ventana"
+	L_UNLOCK_WINDOW = "Desbloquear ventana"
 elseif LOCALE_frFR then
-	L["resize_header"] = "Redimensionner"
-	L["resize_click"] = "|cff00ff00Clic|r pour redimensionner."
-	L["resize_shift_click"] = "|cff00ff00Shift clic|r pour changer la largeur."
-	L["resize_alt_click"] = "|cff00ff00Alt clic|r pour changer la hauteur."
-	L["lock_window"] = "Verrouiller la fenêtre"
-	L["unlock_window"] = "Déverrouiller la fenêtre"
+	L_RESIZE_HEADER = "Redimensionner"
+	L_RESIZE_CLICK = "\124cff00ff00Clic\124r pour redimensionner."
+	L_RESIZE_SHIFT_CLICK = "\124cff00ff00Shift clic\124r pour changer la largeur."
+	L_RESIZE_ALT_CLICK = "\124cff00ff00Alt clic\124r pour changer la hauteur."
+	L_LOCK_WINDOW = "Verrouiller la fenêtre"
+	L_UNLOCK_WINDOW = "Déverrouiller la fenêtre"
 elseif LOCALE_koKR then
-	L["resize_header"] = "크기 조정"
-	L["resize_click"] = "|cff00ff00클릭|r하여 창 크기를 자유롭게 조정합니다."
-	L["resize_shift_click"] = "너비를 변경하려면 |cff00ff00Shift-클릭|r하십시오."
-	L["resize_alt_click"] = "높이를 변경하려면 |cff00ff00Alt-클릭|r하십시오"
-	L["lock_window"] = "잠금 창"
-	L["unlock_window"] = "잠금 해제 창"
+	L_RESIZE_HEADER = "크기 조정"
+	L_RESIZE_CLICK = "\124cff00ff00클릭\124r하여 창 크기를 자유롭게 조정합니다."
+	L_RESIZE_SHIFT_CLICK = "너비를 변경하려면 \124cff00ff00Shift-클릭\124r하십시오."
+	L_RESIZE_ALT_CLICK = "높이를 변경하려면 \124cff00ff00Alt-클릭\124r하십시오"
+	L_LOCK_WINDOW = "잠금 창"
+	L_UNLOCK_WINDOW = "잠금 해제 창"
 elseif LOCALE_ruRU then
-	L["resize_header"] = "Изменение размера"
-	L["resize_click"] = "|cff00ff00Щелкните|r, чтобы изменить размер окна."
-	L["resize_shift_click"] = "|cff00ff00Shift-Click|r, чтобы изменить ширину."
-	L["resize_alt_click"] = "|cff00ff00ALT-Click|r, чтобы изменить высоту."
-	L["lock_window"] = "Заблокировать окно"
-	L["unlock_window"] = "Разблокировать окно"
+	L_RESIZE_HEADER = "Изменение размера"
+	L_RESIZE_CLICK = "\124cff00ff00Щелкните\124r, чтобы изменить размер окна."
+	L_RESIZE_SHIFT_CLICK = "\124cff00ff00Shift-Click\124r, чтобы изменить ширину."
+	L_RESIZE_ALT_CLICK = "\124cff00ff00ALT-Click\124r, чтобы изменить высоту."
+	L_LOCK_WINDOW = "Заблокировать окно"
+	L_UNLOCK_WINDOW = "Разблокировать окно"
 elseif LOCALE_zhCN then
-	L["resize_header"] = "调整大小"
-	L["resize_click"] = "|cff00ff00单击|r以调整窗口大小。"
-	L["resize_shift_click"] = "|cff00ff00Shift-Click|r改变窗口的宽度。"
-	L["resize_alt_click"] = "|cff00ff00Alt-Click|r更改窗口高度。"
-	L["lock_window"] = "锁定窗口"
-	L["unlock_window"] = "解锁窗口"
+	L_RESIZE_HEADER = "调整大小"
+	L_RESIZE_CLICK = "\124cff00ff00单击\124r以调整窗口大小。"
+	L_RESIZE_SHIFT_CLICK = "\124cff00ff00Shift-Click\124r改变窗口的宽度。"
+	L_RESIZE_ALT_CLICK = "\124cff00ff00Alt-Click\124r更改窗口高度。"
+	L_LOCK_WINDOW = "锁定窗口"
+	L_UNLOCK_WINDOW = "解锁窗口"
 elseif LOCALE_zhTW then
-	L["resize_header"] = "調整大小"
-	L["resize_click"] = "|cff00ff00單擊|r以調整窗口大小。"
-	L["resize_shift_click"] = "|cff00ff00Shift-Click|r改變窗口的寬度。"
-	L["resize_alt_click"] = "|cff00ff00Alt-Click|r更改窗口高度。"
-	L["lock_window"] = "鎖定窗口"
-	L["unlock_window"] = "解鎖窗口"
+	L_RESIZE_HEADER = "調整大小"
+	L_RESIZE_CLICK = "\124cff00ff00單擊\124r以調整窗口大小。"
+	L_RESIZE_SHIFT_CLICK = "\124cff00ff00Shift-Click\124r改變窗口的寬度。"
+	L_RESIZE_ALT_CLICK = "\124cff00ff00Alt-Click\124r更改窗口高度。"
+	L_LOCK_WINDOW = "鎖定窗口"
+	L_UNLOCK_WINDOW = "解鎖窗口"
 end
 
 -------------------------------------------------------------------------------
--- class creation
+-- frame and class creation
+
+-- manageable textures and fontstrings z level
+local createFrame
+do
+	local function setZLevel(self, level)
+		local parent = self._parent
+		if level <= 0 then
+			self:SetParent(parent)
+		else
+			local zlevels = parent._zlevels
+			if level > #zlevels then
+				for i = #zlevels + 1, level do
+					zlevels[i] = CreateFrame("Frame", nil, (zlevels[i - 1] or parent))
+					zlevels[i]:SetAllPoints(true)
+				end
+			end
+			self:SetParent(zlevels[level])
+		end
+	end
+
+	local function createTexture(self, ...)
+		local tx = self:_CreateTexture(...)
+		tx._parent = self
+		tx.SetZLevel = setZLevel
+		return tx
+	end
+
+	local function createFontString(self, ...)
+		local fs = self:_CreateFontString(...)
+		fs._parent = self
+		fs.SetZLevel = setZLevel
+		return fs
+	end
+
+	function createFrame(...)
+		local f = CreateFrame(...)
+		f._zlevels = f._zlevels or {}
+
+		f._CreateTexture = f.CreateTexture
+		f.CreateTexture = createTexture
+
+		f._CreateFontString = f.CreateFontString
+		f.CreateFontString = createFontString
+
+		return f
+	end
+end
 
 local function createClass(ftype, parent)
 	local class = (type(ftype) == "table") and ftype or CreateFrame(ftype)
@@ -113,6 +160,7 @@ local barListPrototype = lib.barListPrototype
 
 local listOnEnter, listOnLeave
 local anchorOnEnter, anchorOnLeave
+local stretchOnMouseDown, stretchOnMouseUp
 local SetTextureValue
 
 lib.bars = lib.bars or {}
@@ -130,8 +178,8 @@ local dummyTable = {}
 
 local ICON_LOCK = [[Interface\AddOns\Skada\Libs\SpecializedLibBars-1.0\lock.tga]]
 local ICON_UNLOCK = [[Interface\AddOns\Skada\Libs\SpecializedLibBars-1.0\unlock.tga]]
-local ICON_RESIZE = [[Interface\AddOns\Skada\Libs\SpecializedLibBars-1.0\resize.blp]]
-local ICON_STRETCH = [[Interface\AddOns\Skada\Libs\SpecializedLibBars-1.0\stretch.blp]]
+local ICON_RESIZE = [[Interface\CHATFRAME\UI-ChatIM-SizeGrabber-Up]]
+local ICON_STRETCH = [[Interface\MINIMAP\ROTATING-MINIMAPGUIDEARROW.blp]]
 
 -------------------------------------------------------------------------------
 -- local functions
@@ -159,30 +207,48 @@ end
 
 -- lib:NewBarGroup - bar list creation
 do
-	local function anchorOnMouseDown(self)
+	local function anchorOnMouseDown(self, button)
 		local p = self:GetParent()
-		if not p.locked and not p.isMoving then
+		if p.locked then
+			stretchOnMouseDown(p.stretcher, button)
+		elseif not p.locked and not p.isMoving then
 			p.isMoving = true
 
 			p.startX = p:GetLeft()
 			p.startY = p:GetTop()
-			p.callbacks:Fire("WindowMoveStart", p, p.startX, p.startY)
-
 			p:StartMoving()
+
+			if p.callbacks then
+				p.callbacks:Fire("WindowMoveStart", p, p.startX, p.startY)
+			end
 		end
 	end
 
-	local function anchorOnMouseUp(self)
+	local function anchorOnMouseUp(self, button)
 		local p = self:GetParent()
-		if not p.locked and p.isMoving then
+		if p.locked then
+			stretchOnMouseUp(p.stretcher, button)
+		elseif not p.locked and p.isMoving then
 			p.isMoving = nil
 			p:StopMovingOrSizing()
 
 			local endX = p:GetLeft()
 			local endY = p:GetTop()
-			if self.startX ~= endX or self.startY ~= endY then
+			if p.callbacks and (self.startX ~= endX or self.startY ~= endY) then
 				p.callbacks:Fire("WindowMoveStop", p, endX, endY)
 			end
+		end
+	end
+
+	local function listOnMouseDown(self, button)
+		if button == "LeftButton" and not self.locked then
+			anchorOnMouseDown(self.button, button)
+		end
+	end
+
+	local function listOnMouseUp(self, button)
+		if button == "LeftButton" and not self.locked then
+			anchorOnMouseUp(self.button, button)
 		end
 	end
 
@@ -212,19 +278,37 @@ do
 	end
 
 	local DEFAULT_TEXTURE = [[Interface\TARGETINGFRAME\UI-StatusBar]]
+	local DEFAULT_BACKDROP = {
+		bgFile = [[Interface\Tooltips\UI-Tooltip-Background]],
+		edgeFile = [[Interface\Tooltips\UI-Tooltip-Border]],
+		inset = 4,
+		edgeSize = 8,
+		tile = true,
+		insets = {left = 2, right = 2, top = 2, bottom = 2}
+	}
+
 	function lib:NewBarGroup(name, orientation, height, length, thickness, frameName)
-		assert(self ~= lib, "You may only call :NewBarGroup as an embedded function")
+		if self == lib then
+			error("You may only call :NewBarGroup as an embedded function")
+		end
+
+		if barLists[self] and barLists[self][name] then
+			error("A bar list named " .. name .. " already exists.")
+		end
 
 		barLists[self] = barLists[self] or {}
-		assert(barLists[self][name] == nil, "A bar list named " .. name .. " already exists.")
 
 		orientation = orientation or 1
 		orientation = (orientation == "LEFT") and 1 or orientation
 		orientation = (orientation == "RIGHT") and 3 or orientation
 
-		local list = barListPrototype:Bind(CreateFrame("Frame", frameName, UIParent))
+		frameName = frameName:gsub("%W","")
+		local list = barListPrototype:Bind(createFrame("Frame", frameName, UIParent))
+		list:SetFrameLevel(1)
 		list:SetResizable(true)
 		list:SetMovable(true)
+		list:SetScript("OnMouseDown", listOnMouseDown)
+		list:SetScript("OnMouseUp", listOnMouseUp)
 
 		list.callbacks = list.callbacks or CallbackHandler:New(list)
 		barLists[self][name] = list
@@ -237,15 +321,17 @@ do
 			lib.defaultFont = myfont
 		end
 
-		list.button = list.button or CreateFrame("Button", "$parentAnchor", list)
+		list.button = list.button or createFrame("Button", "$parentAnchor", list)
+		list.button:SetFrameLevel(list:GetFrameLevel() + 3)
 		list.button:SetText(name)
 		list.button:SetNormalFontObject(myfont)
+		list.button:SetBackdrop(DEFAULT_BACKDROP)
+		list.button:SetBackdropColor(0, 0, 0, 1)
 
-		list.button.text = list.button:GetFontString()
-		list.button.bg = list.button:CreateTexture("$parentTexture", "BACKGROUND")
-		list.button.bg:SetAllPoints()
+		list.button.text = list.button:GetFontString(nil, "ARTWORK")
+		list.button.text:SetWordWrap(false)
 
-		list.button.icon = list.button.icon or list.button:CreateTexture(nil, "ARTWORK")
+		list.button.icon = list.button.icon or list.button:CreateTexture("$parentIcon", "ARTWORK")
 		list.button.icon:SetTexCoord(0.094, 0.906, 0.094, 0.906)
 		list.button.icon:SetPoint("LEFT", list.button, "LEFT", 5, 0)
 		list.button.icon:SetSize(14, 14)
@@ -271,6 +357,7 @@ do
 
 		list.texture = DEFAULT_TEXTURE
 		list.spacing = 0
+		list.startpoint = 0
 		list.offset = 0
 		list.numBars = 0
 
@@ -283,7 +370,7 @@ do
 			list.resizeright.icon = list.resizeright:CreateTexture("$parentIcon", "OVERLAY")
 			list.resizeright.icon:SetAllPoints(list.resizeright)
 			list.resizeright.icon:SetTexture(ICON_RESIZE)
-			list.resizeright.icon:SetVertexColor(0.6, 0.6, 0.6, 0.7)
+			list.resizeright.icon:SetVertexColor(1, 1, 1, 0.65)
 			list.resizeright:Hide()
 		end
 
@@ -296,7 +383,7 @@ do
 			list.resizeleft.icon = list.resizeleft:CreateTexture("$parentIcon", "OVERLAY")
 			list.resizeleft.icon:SetAllPoints(list.resizeleft)
 			list.resizeleft.icon:SetTexture(ICON_RESIZE)
-			list.resizeleft.icon:SetVertexColor(0.6, 0.6, 0.6, 0.7)
+			list.resizeleft.icon:SetVertexColor(1, 1, 1, 0.65)
 			list.resizeleft:Hide()
 		end
 
@@ -304,7 +391,7 @@ do
 		if not list.lockbutton then
 			list.lockbutton = CreateFrame("Button", "$parentLockButton", list)
 			list.lockbutton:SetPoint("BOTTOM", list, "BOTTOM", 0, 2)
-			list.lockbutton:SetFrameLevel(list:GetFrameLevel() + 5)
+			list.lockbutton:SetFrameLevel(list:GetFrameLevel() + 3)
 			list.lockbutton:SetSize(12, 12)
 			list.lockbutton:SetAlpha(0)
 			list.lockbutton.icon = list.lockbutton:CreateTexture("$parentIcon", "OVERLAY")
@@ -317,11 +404,16 @@ do
 		-- stretch button
 		if not list.stretcher then
 			list.stretcher = CreateFrame("Button", "$parentStretcher", list)
-			list.stretcher:SetFrameLevel(list:GetFrameLevel() + 5)
-			list.stretcher:SetSize(32, 16)
+			list.stretcher:SetFrameLevel(list:GetFrameLevel() + 3)
+			list.stretcher:SetSize(32, 12)
 			list.stretcher:SetAlpha(0)
-			list.stretcher.icon = list.stretcher:CreateTexture("$parentTexture", "OVERLAY")
-			list.stretcher.icon:SetAllPoints(list.stretcher)
+			list.stretcher.bg = list.stretcher:CreateTexture("$parentBG", "BACKGROUND")
+			list.stretcher.bg:SetAllPoints(true)
+			list.stretcher.bg:SetTexture([[Interface\Buttons\WHITE8X8]])
+			list.stretcher.bg:SetVertexColor(0, 0, 0, 0.85)
+			list.stretcher.icon = list.stretcher:CreateTexture("$parentIcon", "ARTWORK")
+			list.stretcher.icon:SetSize(12, 12)
+			list.stretcher.icon:SetPoint("CENTER")
 			list.stretcher.icon:SetTexture(ICON_STRETCH)
 			list.stretcher.icon:SetDesaturated(true)
 			list.stretcher:Hide()
@@ -359,8 +451,14 @@ end
 
 -- lib:NewBarFromPrototype - creates a new bar
 function lib:NewBarFromPrototype(prototype, name, ...)
-	assert(self ~= lib, "You may only call :NewBar as an embedded function")
-	assert(type(prototype) == "table" and type(prototype.mt) == "table", "Invalid bar prototype")
+	if self == lib then
+		error("You may only call :NewBar as an embedded function")
+	end
+
+	if type(prototype) ~= "table" or type(prototype.mt) ~= "table" then
+		error("Invalid bar prototype")
+	end
+
 	bars[self] = bars[self] or {}
 	local bar = bars[self][name]
 	local isNew = false
@@ -368,7 +466,7 @@ function lib:NewBarFromPrototype(prototype, name, ...)
 		self.numBars = self.numBars + 1
 		bar = tremove(recycledBars)
 		if not bar then
-			bar = prototype:Bind(CreateFrame("Frame"))
+			bar = prototype:Bind(createFrame("Frame"))
 		else
 			bar:Show()
 		end
@@ -414,6 +512,7 @@ function lib:ReleaseBar(name)
 		bars[self][bar.name] = nil
 		recycledBars[#recycledBars + 1] = bar
 		self.numBars = self.numBars - 1
+		self.callbacks:Fire("BarReleased", bar, bar.name, self.numBars)
 	end
 end
 
@@ -542,7 +641,10 @@ end
 -- changes bars orientation
 function barListPrototype:SetOrientation(o)
 	if o and self.orientation ~= o then
-		assert(o == 1 or o == 2, "orientation must be 1 or 2.")
+		if o ~= 1 and o ~= 2 then
+			error("orientation must be 1 or 2.")
+		end
+
 		self.orientation = o
 		if bars[self] then
 			for _, bar in pairs(bars[self]) do
@@ -567,7 +669,7 @@ end
 
 -- barListPrototype:SetSmoothing - bars animation
 do
-	local function listOnUpdate(self, elapsed)
+	local function smoothUpdate(self, elapsed)
 		if bars[self] then
 			for _, bar in pairs(bars[self]) do
 				if bar.targetamount and bar:IsShown() then
@@ -591,9 +693,9 @@ do
 	function barListPrototype:SetSmoothing(smoothing)
 		self.smoothing = smoothing or nil
 		if self.smoothing then
-			self:AddOnUpdate(listOnUpdate)
+			self:AddOnUpdate(smoothUpdate)
 		else
-			self:RemoveOnUpdate(listOnUpdate)
+			self:RemoveOnUpdate(smoothUpdate)
 		end
 	end
 end
@@ -719,12 +821,14 @@ end
 -- shows anchor
 function barListPrototype:ShowAnchor()
 	self.button:Show()
+	self:GuessMaxBars()
 	self:SortBars()
 end
 
 -- hides anchor
 function barListPrototype:HideAnchor()
 	self.button:Hide()
+	self:GuessMaxBars()
 	self:SortBars()
 end
 
@@ -747,6 +851,15 @@ function barListPrototype:HideAnchorIcon()
 		self.button.icon:SetTexture(nil)
 		self.button.icon:Hide()
 		self:AdjustTitle()
+	end
+end
+
+-- adds an offset to bars starting point.
+function barListPrototype:SetDisplacement(startpoint)
+	if startpoint and self.startpoint ~= startpoint then
+		self.startpoint = startpoint
+		self:GuessMaxBars()
+		self:SortBars()
 	end
 end
 
@@ -802,7 +915,7 @@ function barListPrototype:AdjustTitle(nomouseover)
 
 	if self.lastbtn and self.orientation == 2 then
 		if self.mouseover and not nomouseover then
-			self.button.text:SetPoint("LEFT", self.button, "LEFT", 5, 0)
+			self.button.text:SetPoint("LEFT", self.button, "LEFT", 5, 1)
 		else
 			self.button.text:SetPoint("LEFT", self.lastbtn, "RIGHT")
 		end
@@ -812,7 +925,7 @@ function barListPrototype:AdjustTitle(nomouseover)
 		self.button.icon:SetPoint("LEFT", self.button, "LEFT", 5, -1)
 		self.button.text:SetPoint("LEFT", self.button, "LEFT", self.showAnchorIcon and 23 or 5, 0)
 		if self.mouseover and not nomouseover then
-			self.button.text:SetPoint("RIGHT", self.button, "RIGHT", -5, 0)
+			self.button.text:SetPoint("RIGHT", self.button, "RIGHT", -5, 1)
 		else
 			self.button.text:SetPoint("RIGHT", self.lastbtn, "LEFT")
 		end
@@ -962,18 +1075,30 @@ end
 -- barListPrototype:SetDisableResize - disable group resize
 do
 	function listOnEnter(self)
-		self.lockbutton:SetAlpha(1)
-		self.stretcher:SetAlpha(1)
-		self.resizeright:SetAlpha(1)
-		self.resizeleft:SetAlpha(1)
+		if self.lockbutton then
+			self.lockbutton:SetAlpha(1)
+		end
+		if self.stretcher then
+			self.stretcher:SetAlpha(1)
+		end
+		if self.resizeright then
+			self.resizeright:SetAlpha(1)
+			self.resizeleft:SetAlpha(1)
+		end
 	end
 
 	function listOnLeave(self)
 		GameTooltip:Hide()
-		self.lockbutton:SetAlpha(0)
-		self.stretcher:SetAlpha(0)
-		self.resizeright:SetAlpha(0)
-		self.resizeleft:SetAlpha(0)
+		if self.lockbutton then
+			self.lockbutton:SetAlpha(0)
+		end
+		if self.stretcher then
+			self.stretcher:SetAlpha(0)
+		end
+		if self.resizeright then
+			self.resizeright:SetAlpha(0)
+			self.resizeleft:SetAlpha(0)
+		end
 	end
 
 	local strfind = strfind or string.find
@@ -1001,8 +1126,10 @@ do
 			p:StopMovingOrSizing()
 			p:SetLength(p:GetLength())
 			p:GuessMaxBars()
-			p.callbacks:Fire("WindowResized", p)
 			p:SortBars()
+			if p.callbacks then
+				p.callbacks:Fire("WindowResized", p)
+			end
 		end
 	end
 
@@ -1010,18 +1137,18 @@ do
 		GameTooltip:SetOwner(self, "ANCHOR_NONE")
 		GameTooltip:SetPoint("BOTTOM", self, "TOP", 0, 0)
 		GameTooltip:ClearLines()
-		GameTooltip:AddLine(L["resize_header"])
-		GameTooltip:AddLine(L["resize_click"], 1, 1, 1)
-		GameTooltip:AddLine(L["resize_shift_click"], 1, 1, 1)
-		GameTooltip:AddLine(L["resize_alt_click"], 1, 1, 1)
+		GameTooltip:AddLine(L_RESIZE_HEADER)
+		GameTooltip:AddLine(L_RESIZE_CLICK, 1, 1, 1)
+		GameTooltip:AddLine(L_RESIZE_SHIFT_CLICK, 1, 1, 1)
+		GameTooltip:AddLine(L_RESIZE_ALT_CLICK, 1, 1, 1)
 		GameTooltip:Show()
 		listOnEnter(self:GetParent())
-		self.icon:SetVertexColor(1, 1, 1, 0.7)
+		self.icon:SetVertexColor(1, 1, 1, 1)
 	end
 
 	local function sizerOnLeave(self)
 		listOnLeave(self:GetParent())
-		self.icon:SetVertexColor(0.6, 0.6, 0.6, 0.7)
+		self.icon:SetVertexColor(1, 1, 1, 0.65)
 	end
 
 	local function lockOnEnter(self)
@@ -1030,7 +1157,7 @@ do
 		GameTooltip:SetPoint("BOTTOM", self, "TOP", 0, 0)
 		GameTooltip:ClearLines()
 		GameTooltip:AddLine(p.name)
-		GameTooltip:AddLine(p.locked and L["unlock_window"] or L["lock_window"], 1, 1, 1)
+		GameTooltip:AddLine(p.locked and L_UNLOCK_WINDOW or L_LOCK_WINDOW, 1, 1, 1)
 		GameTooltip:Show()
 		listOnEnter(self:GetParent())
 		self.icon:SetVertexColor(1, 1, 1, 0.7)
@@ -1131,7 +1258,7 @@ do
 		end
 	end
 
-	local function stretchOnMouseDown(self, button)
+	function stretchOnMouseDown(self, button)
 		local p = self:GetParent()
 		if button == "LeftButton" and p then
 			p.stretch_on = true
@@ -1139,7 +1266,7 @@ do
 		end
 	end
 
-	local function stretchOnMouseUp(self, button)
+	function stretchOnMouseUp(self, button)
 		local p = self:GetParent()
 		if p and p.stretch_on then
 			p.stretch_off = true
@@ -1181,10 +1308,10 @@ function barListPrototype:SetReverseStretch(stretchdown)
 		self.stretcher:ClearAllPoints()
 		if self.stretchdown then
 			self.stretcher:SetPoint("TOP", self, "BOTTOM")
-			self.stretcher.icon:SetTexCoord(0, 1, 1, 0)
+			self.stretcher.icon:SetTexCoord(0.219, 0.781, 0.781, 0)
 		else
 			self.stretcher:SetPoint("BOTTOMRIGHT", self, "TOPRIGHT")
-			self.stretcher.icon:SetTexCoord(0, 1, 0, 1)
+			self.stretcher.icon:SetTexCoord(0.219, 0.781, 0, 0.781)
 		end
 	end
 end
@@ -1236,7 +1363,10 @@ end
 -- sets bars sort function
 function barListPrototype:SetSortFunction(func)
 	if self.sortFunc ~= func then
-		assert(func == nil or type(func) == "function")
+		if func and type(func) ~= "function" then
+			error(":SetSortFunction requires a valid function.")
+		end
+
 		self.sortFunc = func
 	end
 end
@@ -1275,7 +1405,8 @@ function barListPrototype:GuessMaxBars()
 
 	if self.button:IsVisible() then
 		local height = self:GetHeight() + self.spacing
-		maxbars = ((maxbars - 1) * ((height - self.button:GetHeight()) / height)) + 1
+		local height2 = self.button:GetHeight() + self.startpoint
+		maxbars = ((maxbars - 1) * ((height - height2) / height)) + 1
 	end
 
 	self.maxBars = floor(maxbars)
@@ -1508,7 +1639,7 @@ do
 		local orientation = self.orientation
 		local growup = self.growup
 		local spacing = self.spacing
-		local startpoint = self.button:IsVisible() and self.button:GetHeight() or 0
+		local startpoint = self.button:IsVisible() and (self.button:GetHeight() + self.startpoint) or 0
 
 		local from, to
 		local thickness, showIcon = self.thickness, self.showIcon
@@ -1590,12 +1721,26 @@ do
 	end
 end
 
--- adds OnUpdate function
-function barListPrototype:AddOnUpdate(func)
-	if type(func) == "function" then
-		self.updateFuncs = self.updateFuncs or {}
-		self.updateFuncs[func] = true
-		self:SetScript("OnUpdate", self.OnUpdate)
+-- barListPrototype:AddOnUpdate
+do
+	-- handles OnUpdate
+	local function listOnUpdate(self, elapsed)
+		if not self.updateFuncs or next(self.updateFuncs) == nil then
+			self:SetScript("OnUpdate", nil)
+		else
+			for func in pairs(self.updateFuncs) do
+				func(self, elapsed)
+			end
+		end
+	end
+
+	-- adds OnUpdate function
+	function barListPrototype:AddOnUpdate(func)
+		if type(func) == "function" then
+			self.updateFuncs = self.updateFuncs or {}
+			self.updateFuncs[func] = true
+			self:SetScript("OnUpdate", listOnUpdate)
+		end
 	end
 end
 
@@ -1603,17 +1748,6 @@ end
 function barListPrototype:RemoveOnUpdate(func)
 	if self.updateFuncs then
 		self.updateFuncs[func] = nil
-	end
-end
-
--- handles OnUpdate
-function barListPrototype:OnUpdate(elapsed)
-	if self.updateFuncs and next(self.updateFuncs) ~= nil then
-		for func in pairs(self.updateFuncs) do
-			func(self, elapsed)
-		end
-	else
-		self:SetScript("OnUpdate", nil)
 	end
 end
 
@@ -1632,25 +1766,27 @@ do
 	local function barOnEnter(self, motion)
 		local p = self:GetParent()
 		listOnEnter(p)
-		p.callbacks:Fire("BarEnter", self, motion)
 		if p.barhighlight then
 			self.hg:SetVertexColor(1, 1, 1, 0.1)
+		end
+		if p.callbacks then
+			p.callbacks:Fire("BarEnter", self, motion)
 		end
 	end
 
 	local function barOnLeave(self, motion)
 		local p = self:GetParent()
 		listOnLeave(p)
-		p.callbacks:Fire("BarLeave", self, motion)
 		if p.barhighlight then
 			self.hg:SetVertexColor(0, 0, 0, 0)
+		end
+		if p.callbacks then
+			p.callbacks:Fire("BarLeave", self, motion)
 		end
 	end
 
 	local DEFAULT_ICON = [[Interface\Icons\INV_Misc_QuestionMark]]
 	function barPrototype:Create(text, value, maxVal, icon, orientation, length, thickness)
-		self.callbacks = self.callbacks or CallbackHandler:New(self)
-
 		self:SetScript("OnMouseDown", barOnMouseDown)
 		self:SetScript("OnEnter", barOnEnter)
 		self:SetScript("OnLeave", barOnLeave)
@@ -1721,8 +1857,6 @@ end
 
 -- releases a bar that's no longer in use
 function barPrototype:OnBarReleased()
-	self.callbacks:Fire("BarReleased", self, self.name)
-
 	self.ownerGroup = nil
 
 	if self.colors then
@@ -1740,18 +1874,6 @@ function barPrototype:OnBarReleased()
 	local f, s, m = ChatFontNormal:GetFont()
 	self.label:SetFont(f, s or 10, m)
 	self.timerLabel:SetFont(f, s or 10, m)
-
-	if self.callbacks.insertQueue then
-		for eventname, callbacks in pairs(self.callbacks.insertQueue) do
-			wipe(callbacks)
-		end
-	end
-	for eventname, callbacks in pairs(self.callbacks.events) do
-		wipe(callbacks)
-		if self.callbacks.OnUnused then
-			self.callbacks:OnUnused(self, eventname)
-		end
-	end
 end
 
 -- handles size change
@@ -1942,8 +2064,9 @@ end
 function barPrototype:UpdateOrientationLayout(orientation)
 	local t = nil
 	if orientation == 1 then
-		self.icon:ClearAllPoints()
-		self.icon:SetPoint("RIGHT", self, "LEFT", 0, 0)
+		t = self.icon
+		t:ClearAllPoints()
+		t:SetPoint("RIGHT", self, "LEFT", 0, 0)
 
 		t = self.spark
 		t:ClearAllPoints()
@@ -1972,8 +2095,9 @@ function barPrototype:UpdateOrientationLayout(orientation)
 
 		self.bg:SetTexCoord(0, 1, 0, 1)
 	elseif orientation == 2 then
-		self.icon:ClearAllPoints()
-		self.icon:SetPoint("LEFT", self, "RIGHT", 0, 0)
+		t = self.icon
+		t:ClearAllPoints()
+		t:SetPoint("LEFT", self, "RIGHT", 0, 0)
 
 		t = self.spark
 		t:ClearAllPoints()
@@ -2024,7 +2148,10 @@ do
 	end
 
 	function barPrototype:SetValue(val)
-		assert(val ~= nil, "value cannot be nil!")
+		if not val then
+			error("value cannot be nil!")
+		end
+
 		self.value = val
 		if not self.maxValue or val > self.maxValue then
 			self.maxValue = val

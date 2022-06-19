@@ -1,15 +1,15 @@
 local Skada = Skada
-Skada:AddLoadableModule("Sunder Counter", function(L)
+Skada:RegisterModule("Sunder Counter", function(L, P, _, C, new, del, clear)
 	if Skada:IsDisabled("Sunder Counter") then return end
 
-	local mod = Skada:NewModule(L["Sunder Counter"])
-	local targetmod = mod:NewModule(L["Sunder target list"])
+	local mod = Skada:NewModule("Sunder Counter")
+	local targetmod = mod:NewModule("Sunder target list")
+	local sourcemod = mod:NewModule("Sunder source list")
 
 	local pairs, tostring, format = pairs, tostring, string.format
 	local GetSpellInfo = Skada.GetSpellInfo or GetSpellInfo
 	local GetSpellLink = Skada.GetSpellLink or GetSpellLink
 	local T = Skada.Table
-	local new, del = Skada.newTable, Skada.delTable
 	local sunder, sunderLink, devastate, _
 
 	local function log_sunder(set, data)
@@ -18,7 +18,7 @@ Skada:AddLoadableModule("Sunder Counter", function(L)
 			set.sunder = (set.sunder or 0) + 1
 			player.sunder = (player.sunder or 0) + 1
 
-			if (set ~= Skada.total or Skada.db.profile.totalidc) and data.dstName then
+			if (set ~= Skada.total or P.totalidc) and data.dstName then
 				player.sundertargets = player.sundertargets or {}
 				player.sundertargets[data.dstName] = (player.sundertargets[data.dstName] or 0) + 1
 			end
@@ -39,8 +39,8 @@ Skada:AddLoadableModule("Sunder Counter", function(L)
 
 			Skada:DispatchSets(log_sunder, data)
 
-			if Skada.db.profile.modules.sunderannounce then
-				if not Skada.db.profile.modules.sunderbossonly or (Skada.db.profile.modules.sunderbossonly and Skada:IsBoss(dstGUID)) then
+			if P.modules.sunderannounce then
+				if not P.modules.sunderbossonly or (P.modules.sunderbossonly and Skada:IsBoss(dstGUID, true)) then
 					mod.targets = mod.targets or T.get("Sunder_Targets")
 					if not mod.targets[dstGUID] then
 						mod.targets[dstGUID] = new()
@@ -69,8 +69,8 @@ Skada:AddLoadableModule("Sunder Counter", function(L)
 			Skada:ScheduleTimer(function()
 				if mod.targets and mod.targets[dstGUID] then
 					mod.targets[dstGUID] = del(mod.targets[dstGUID])
-					if Skada.db.profile.modules.sunderannounce then
-						if not Skada.db.profile.modules.sunderbossonly or (Skada.db.profile.modules.sunderbossonly and Skada:IsBoss(dstGUID)) then
+					if P.modules.sunderannounce then
+						if not P.modules.sunderbossonly or (P.modules.sunderbossonly and Skada:IsBoss(dstGUID, true)) then
 							mod:Announce(format(L["%s dropped from %s!"], sunderLink or sunder, dstName or L["Unknown"]))
 						end
 					end
@@ -80,15 +80,55 @@ Skada:AddLoadableModule("Sunder Counter", function(L)
 	end
 
 	local function TargetDied(timestamp, eventtype, _, _, _, dstGUID)
-		if Skada.db.profile.modules.sunderannounce and dstGUID and mod.targets and mod.targets[dstGUID] then
-			mod.targets[dstGUID] = nil
+		if P.modules.sunderannounce and dstGUID and mod.targets and mod.targets[dstGUID] then
+			mod.targets[dstGUID] = del(mod.targets[dstGUID])
 		end
 	end
 
 	local function DoubleCheckSunder()
 		if not sunder then
 			sunder, devastate = GetSpellInfo(47467), GetSpellInfo(47498)
-			sunderLink = Skada.db.profile.reportlinks and GetSpellLink(47467)
+			sunderLink = P.reportlinks and GetSpellLink(47467)
+		end
+	end
+
+	function sourcemod:Enter(win, id, label)
+		win.targetid, win.targetname = id, label
+		win.title = format(L["%s's <%s> sources"], label, sunder)
+	end
+
+	function sourcemod:Update(win, set)
+		win.title = format(L["%s's <%s> sources"], win.targetname or L["Unknown"], sunder)
+		if not win.targetname then return end
+
+		local sources, total = set:GetSunderSources(win.targetname)
+		if sources then
+			if win.metadata then
+				win.metadata.maxvalue = 0
+			end
+
+			local nr = 0
+			for sourcename, source in pairs(sources) do
+				nr = nr + 1
+				local d = win:nr(nr)
+
+				d.id = source.id
+				d.label = sourcename
+				d.text = source.id and Skada:FormatName(sourcename, source.id)
+				d.class = source.class
+				d.role = source.role
+				d.spec = source.spec
+
+				d.value = source.count
+				d.valuetext = Skada:FormatValueCols(
+					mod.metadata.columns.Count and d.value,
+					mod.metadata.columns.sPercent and Skada:FormatPercent(d.value, total)
+				)
+
+				if win.metadata and d.value > win.metadata.maxvalue then
+					win.metadata.maxvalue = d.value
+				end
+			end
 		end
 	end
 
@@ -177,10 +217,12 @@ Skada:AddLoadableModule("Sunder Counter", function(L)
 	end
 
 	function mod:OnEnable()
+		sourcemod.metadata = {showspots = true}
+		targetmod.metadata = {click1 = sourcemod}
 		self.metadata = {
 			showspots = true,
 			click1 = targetmod,
-			columns = {Count = true, Percent = false, sPercent = true},
+			columns = {Count = true, Percent = false, sPercent = false},
 			icon = [[Interface\Icons\ability_warrior_sunder]]
 		}
 
@@ -191,54 +233,50 @@ Skada:AddLoadableModule("Sunder Counter", function(L)
 		Skada:RegisterForCL(SunderRemoved, "SPELL_AURA_REMOVED", {src_is_interesting_nopets = true})
 		Skada:RegisterForCL(TargetDied, "UNIT_DIED", "UNIT_DESTROYED", "UNIT_DISSIPATES", {dst_is_not_interesting = true})
 
+		Skada.RegisterMessage(self, "COMBAT_PLAYER_LEAVE", "CombatLeave")
 		Skada:AddMode(self, L["Buffs and Debuffs"])
 	end
 
 	function mod:OnDisable()
+		Skada.UnregisterAllMessages(self)
 		Skada:RemoveMode(self)
 	end
 
 	function mod:AddToTooltip(set, tooltip)
-		if set and (set.sunder or 0) > 0 then
-			tooltip:AddDoubleLine(sunder, set.sunder or 0, 1, 1, 1)
+		if set.sunder and set.sunder > 0 then
+			tooltip:AddDoubleLine(sunder, set.sunder, 1, 1, 1)
 		end
 	end
 
 	function mod:GetSetSummary(set)
-		return tostring(set.sunder or 0), set.sunder or 0
+		local sunders = set.sunder or 0
+		return tostring(sunders), sunders
 	end
 
-	function mod:SetComplete(set)
+	function mod:CombatLeave()
 		T.clear(data)
-
-		-- delete to reuse
-		if self.targets then
-			for k, _ in pairs(self.targets) do
-				self.targets[k] = del(self.targets[k])
-			end
-			T.free("Sunder_Targets", self.targets)
-		end
+		T.free("Sunder_Targets", self.targets, nil, del)
 	end
 
 	function mod:Announce(msg)
-		Skada:SendChat(msg, Skada.db.profile.modules.sunderchannel or "SAY", "preset")
+		Skada:SendChat(msg, P.modules.sunderchannel or "SAY", "preset")
 	end
 
 	function mod:OnInitialize()
 		DoubleCheckSunder()
 
-		if Skada.db.profile.modules.sunderchannel == nil then
-			Skada.db.profile.modules.sunderchannel = "SAY"
+		if P.modules.sunderchannel == nil then
+			P.modules.sunderchannel = "SAY"
 		end
 
 		Skada.options.args.modules.args.sundercounter = {
 			type = "group",
-			name = self.moduleName,
-			desc = format(L["Options for %s."], self.moduleName),
+			name = self.localeName,
+			desc = format(L["Options for %s."], self.localeName),
 			args = {
 				header = {
 					type = "description",
-					name = self.moduleName,
+					name = self.localeName,
 					fontSize = "large",
 					image = [[Interface\Icons\ability_warrior_sunder]],
 					imageWidth = 18,
@@ -280,14 +318,35 @@ Skada:AddLoadableModule("Sunder Counter", function(L)
 	end
 
 	do
-		local playerPrototype = Skada.playerPrototype
-		local wipe = wipe
+		local setPrototype = Skada.setPrototype
+		function setPrototype:GetSunderSources(name, tbl)
+			local total = 0
+			if self.sunder and name then
+				tbl = clear(tbl or C)
+				for i = 1, #self.players do
+					local p = self.players[i]
+					if p and p.sundertargets and p.sundertargets[name] then
+						tbl[name] = new()
+						tbl[name].id = p.id
+						tbl[name].name = p.name
+						tbl[name].class = p.class
+						tbl[name].role = p.role
+						tbl[name].spec = p.spec
+						tbl[name].count = p.sundertargets[name]
+						total = total + p.sundertargets[name]
+					end
+				end
+			end
+			return tbl, total
+		end
 
+		local playerPrototype = Skada.playerPrototype
 		function playerPrototype:GetSunderTargets(tbl)
 			if self.sundertargets then
-				tbl = wipe(tbl or Skada.cacheTable)
+				tbl = clear(tbl or C)
 				for name, count in pairs(self.sundertargets) do
-					tbl[name] = {count = count}
+					tbl[name] = new()
+					tbl[name].count = count
 					local actor = self.super:GetActor(name)
 					if actor then
 						tbl[name].id = actor.id

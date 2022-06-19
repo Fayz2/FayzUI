@@ -1,8 +1,8 @@
 local Skada = Skada
-Skada:AddLoadableModule("My Spells", function(L)
+Skada:RegisterModule("My Spells", function(L, P)
 	if Skada:IsDisabled("My Spells") then return end
 
-	local mod = Skada:NewModule(L["My Spells"])
+	local mod = Skada:NewModule("My Spells")
 
 	local pairs, format = pairs, string.format
 	local GetSpellInfo = Skada.GetSpellInfo or GetSpellInfo
@@ -32,11 +32,11 @@ Skada:AddLoadableModule("My Spells", function(L)
 			-- count stats
 			tooltip:AddDoubleLine(L["Hits"], spell.count, 1, 1, 1)
 
-			if (spell.hit or 0) > 0 then
+			if spell.hit and spell.hit > 0 then
 				tooltip:AddDoubleLine(L["Normal Hits"], format("%s (%s)", spell.hit, Skada:FormatPercent(spell.hit, spell.count)), 1, 1, 1)
 			end
 
-			if (spell.critical or 0) > 0 then
+			if spell.critical and spell.critical > 0 then
 				tooltip:AddDoubleLine(L["Critical Hits"], format("%s (%s)", spell.critical, Skada:FormatPercent(spell.critical, spell.count)), 1, 1, 1)
 			end
 
@@ -50,9 +50,6 @@ Skada:AddLoadableModule("My Spells", function(L)
 				tooltip:AddDoubleLine(L["Minimum"], Skada:FormatNumber(spellmin), 1, 1, 1)
 			end
 
-			local amount = damage and (Skada.db.profile.absdamage and spell.total or spell.amount) or spell.amount
-			tooltip:AddDoubleLine(L["Average"], Skada:FormatNumber(amount / spell.count), 1, 1, 1)
-
 			if spell.hitmax or spell.max then
 				local spellmax = spell.hitmax or spell.max
 				if spell.criticalmax and spell.criticalmax < spellmax then
@@ -60,6 +57,9 @@ Skada:AddLoadableModule("My Spells", function(L)
 				end
 				tooltip:AddDoubleLine(L["Maximum"], Skada:FormatNumber(spellmax), 1, 1, 1)
 			end
+
+			local amount = damage and (P.absdamage and spell.total or spell.amount) or spell.amount
+			tooltip:AddDoubleLine(L["Average"], Skada:FormatNumber(amount / spell.count), 1, 1, 1)
 		end
 	end
 
@@ -86,7 +86,7 @@ Skada:AddLoadableModule("My Spells", function(L)
 					_, _, d.icon = GetSpellInfo(spell.id)
 					d.spellschool = spell.school
 
-					d.value = Skada.db.profile.absdamage and spell.total or spell.amount
+					d.value = P.absdamage and spell.total or spell.amount
 					d.valuetext = Skada:FormatNumber(d.value)
 
 					if win.metadata and d.value > win.metadata.maxvalue then

@@ -1,20 +1,19 @@
 local Skada = Skada
-Skada:AddLoadableModule("Potions", function(L)
+Skada:RegisterModule("Potions", function(L, P, _, C, new, del, clear)
 	if Skada:IsDisabled("Potions") then return end
 
-	local mod = Skada:NewModule(L["Potions"])
-	local playermod = mod:NewModule(L["Potions list"])
-	local potionmod = mod:NewModule(L["Players list"])
+	local mod = Skada:NewModule("Potions")
+	local playermod = mod:NewModule("Potions list")
+	local potionmod = mod:NewModule("Players list")
 
 	-- cache frequently used globals
-	local pairs, tconcat, format, strsub = pairs, table.concat, string.format, string.sub
+	local pairs, tconcat, format, strsub, tostring = pairs, table.concat, string.format, string.sub, tostring
 	local GetItemInfo, GetSpellInfo = GetItemInfo, Skada.GetSpellInfo or GetSpellInfo
 	local UnitIsDeadOrGhost, GroupIterator = UnitIsDeadOrGhost, Skada.GroupIterator
 	local UnitGUID, UnitName, UnitClass, UnitBuff = UnitGUID, UnitName, UnitClass, UnitBuff
-	local new, del = Skada.newTable, Skada.delTable
 	local T, potionIDs, _= Skada.Table, {}, nil
 
-	local prepotionStr, potionStr = "|c%s%s|r %s", "|T%s:14:14:1:-2:32:32:2:30:2:30|t"
+	local prepotionStr, potionStr = "\124c%s%s\124r %s", "\124T%s:14:14:0:0:64:64:4:60:4:60\124t"
 	local prepotion
 
 	local function log_potion(set, playerid, playername, playerflags, spellid)
@@ -25,7 +24,7 @@ Skada:AddLoadableModule("Potions", function(L)
 			set.potion = (set.potion or 0) + 1
 
 			-- saving this to total set may become a memory hog deluxe.
-			if (set ~= Skada.total or Skada.db.profile.totalidc) and spellid then
+			if (set ~= Skada.total or P.totalidc) and spellid then
 				local potionid = potionIDs[spellid]
 				player.potionspells = player.potionspells or {}
 				player.potionspells[potionid] = (player.potionspells[potionid] or 0) + 1
@@ -47,12 +46,16 @@ Skada:AddLoadableModule("Potions", function(L)
 				local _, class = UnitClass(unit)
 
 				local potions = new()
-				for potionid, _ in pairs(potionIDs) do
-					local _, _, icon, _, _, _, _, _, _, _, spellid = UnitBuff(unit, GetSpellInfo(potionid))
-					if spellid and potionIDs[spellid] then
-						-- instant recording doesn't work, so we delay it
-						Skada:ScheduleTimer(function() PotionUsed(nil, nil, playerid, playername, nil, nil, nil, nil, spellid) end, 1)
-						potions[#potions + 1] = format(potionStr, icon)
+				for i = 1, 40 do
+					local _, _, icon, _, _, _, _, _, _, _, spellid = UnitBuff(unit, i)
+					if spellid then
+						if potionIDs[spellid] then
+							-- instant recording doesn't work, so we delay it
+							Skada:ScheduleTimer(function() PotionUsed(nil, nil, playerid, playername, nil, nil, nil, nil, spellid) end, 1)
+							potions[#potions + 1] = format(potionStr, icon)
+						end
+					else
+						break -- nothing found
 					end
 				end
 
@@ -65,11 +68,21 @@ Skada:AddLoadableModule("Potions", function(L)
 		end
 
 		-- we use this function to record pre-pots as well.
-		function mod:CheckPrePot(event)
-			if event == "COMBAT_PLAYER_ENTER" and Skada.db.profile.prepotion and not self.checked then
+		function mod:CombatEnter()
+			if P.prepotion and not self.checked then
 				prepotion = prepotion or T.get("Potions_PrePotions")
 				GroupIterator(CheckUnitPotions, prepotion)
 				self.checked = true
+			end
+		end
+
+		function mod:CombatLeave()
+			if prepotion then
+				if P.prepotion and next(prepotion) ~= nil then
+					Skada:Printf(L["pre-potion: %s"], tconcat(prepotion, ", "))
+				end
+				T.free("Potions_PrePotions", prepotion)
+				self.checked = nil
 			end
 		end
 	end
@@ -331,8 +344,8 @@ Skada:AddLoadableModule("Potions", function(L)
 		potionIDs[67490] = 42545 -- Runic Mana Injector
 
 		-- don't edit below unless you know what you're doing.
-		if Skada.db.profile.prepotion == nil then
-			Skada.db.profile.prepotion = true
+		if P.prepotion == nil then
+			P.prepotion = true
 		end
 
 		Skada.options.args.tweaks.args.general.args.prepotion = {
@@ -341,6 +354,15 @@ Skada:AddLoadableModule("Potions", function(L)
 			desc = L["Prints pre-potion after the end of the combat."],
 			order = 0
 		}
+	end
+
+	function mod:ApplySettings()
+		if P.prepotion then
+			Skada.RegisterMessage(self, "COMBAT_PLAYER_ENTER", "CombatEnter")
+			Skada.RegisterMessage(self, "COMBAT_PLAYER_LEAVE", "CombatLeave")
+		else
+			Skada.UnregisterAllMessages(self)
+		end
 	end
 
 	function mod:OnEnable()
@@ -363,25 +385,18 @@ Skada:AddLoadableModule("Potions", function(L)
 		playermod.nototal = true
 
 		Skada:RegisterForCL(PotionUsed, "SPELL_CAST_SUCCESS", {src_is_interesting_nopets = true})
-		Skada.RegisterMessage(self, "COMBAT_PLAYER_ENTER", "CheckPrePot")
+		Skada.RegisterCallback(self, "Skada_ApplySettings", "ApplySettings")
 		Skada:AddMode(self)
 	end
 
 	function mod:OnDisable()
-		Skada.UnregisterAllMessages(self)
+		Skada.UnregisterAllCallbacks(self)
 		Skada:RemoveMode(self)
 	end
 
 	function mod:GetSetSummary(set)
-		return set.potion or 0
-	end
-
-	function mod:SetComplete(set)
-		if Skada.db.profile.prepotion and prepotion and next(prepotion) ~= nil then
-			Skada:Printf(L["pre-potion: %s"], tconcat(prepotion, ", "))
-		end
-		T.free("Potions_PrePotions", prepotion)
-		self.checked = nil
+		local potions = set.potion or 0
+		return tostring(potions), potions
 	end
 
 	do
@@ -390,20 +405,19 @@ Skada:AddLoadableModule("Potions", function(L)
 
 		function setPrototype:GetPotion(potionid, class, tbl)
 			if potionid and self.potion then
-				tbl = wipe(tbl or Skada.cacheTable)
+				tbl = clear(tbl or C)
 				local total = 0
 
 				for i = 1, #self.players do
 					local p = self.players[i]
 					if p and p.potionspells and p.potionspells[potionid] and (not class or class == p.class) then
 						total = total + p.potionspells[potionid]
-						tbl[p.name] = {
-							id = p.id,
-							class = p.class,
-							role = p.role,
-							spec = p.spec,
-							count = p.potionspells[potionid]
-						}
+						tbl[p.name] = new()
+						tbl[p.name].id = p.id
+						tbl[p.name].class = p.class
+						tbl[p.name].role = p.role
+						tbl[p.name].spec = p.spec
+						tbl[p.name].count = p.potionspells[potionid]
 					end
 				end
 

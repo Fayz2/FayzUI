@@ -1,8 +1,8 @@
 local Skada = Skada
-Skada:AddLoadableModule("Activity", function(L)
+Skada:RegisterModule("Activity", function(L)
 	if Skada:IsDisabled("Activity") then return end
 
-	local mod = Skada:NewModule(L["Activity"])
+	local mod = Skada:NewModule("Activity")
 	local date, format, max = date, string.format, math.max
 
 	local function activity_tooltip(win, id, label, tooltip)
@@ -116,12 +116,11 @@ Skada:AddLoadableModule("Activity", function(L)
 	end
 
 	function mod:GetSetSummary(set)
-		local settime = set and set:GetTime() or 0
-		if settime > 0 then
-			return Skada:FormatValueCols(
-				self.metadata.columns["Active Time"] and Skada:FormatTime(settime),
-				self.metadata.columns.Percent and format("%s - %s", date("%H:%M", set.starttime), date("%H:%M", set.endtime))
-			), settime
-		end
+		local settime = set:GetTime()
+		local valuetext = Skada:FormatValueCols(
+			self.metadata.columns["Active Time"] and Skada:FormatTime(settime),
+			self.metadata.columns.Percent and format("%s - %s", date("%H:%M", set.starttime), date("%H:%M", set.endtime))
+		)
+		return valuetext, settime
 	end
 end)

@@ -1,11 +1,11 @@
 local Skada = Skada
-Skada:AddLoadableModule("Dispels", function(L)
+Skada:RegisterModule("Dispels", function(L, P, _, C, new, _, clear)
 	if Skada:IsDisabled("Dispels") then return end
 
-	local mod = Skada:NewModule(L["Dispels"])
-	local spellmod = mod:NewModule(L["Dispelled spell list"])
-	local targetmod = mod:NewModule(L["Dispelled target list"])
-	local playermod = mod:NewModule(L["Dispel spell list"])
+	local mod = Skada:NewModule("Dispels")
+	local spellmod = mod:NewModule("Dispelled spell list")
+	local targetmod = mod:NewModule("Dispelled target list")
+	local playermod = mod:NewModule("Dispel spell list")
 	local ignoredSpells = Skada.dummyTable -- Edit Skada\Core\Tables.lua
 
 	-- cache frequently used globals
@@ -21,7 +21,7 @@ Skada:AddLoadableModule("Dispels", function(L)
 			set.dispel = (set.dispel or 0) + 1
 
 			-- saving this to total set may become a memory hog deluxe.
-			if (set ~= Skada.total or Skada.db.profile.totalidc) and data.spellid then
+			if (set ~= Skada.total or P.totalidc) and data.spellid then
 				local spell = player.dispelspells and player.dispelspells[data.spellid]
 				if not spell then
 					player.dispelspells = player.dispelspells or {}
@@ -224,8 +224,8 @@ Skada:AddLoadableModule("Dispels", function(L)
 		self.metadata = {
 			showspots = true,
 			ordersort = true,
-			click1 = spellmod,
-			click2 = targetmod,
+			click1 = targetmod,
+			click2 = spellmod,
 			click3 = playermod,
 			click4 = Skada.FilterClass,
 			click4_label = L["Toggle Class Filter"],
@@ -258,22 +258,22 @@ Skada:AddLoadableModule("Dispels", function(L)
 	end
 
 	function mod:AddToTooltip(set, tooltip)
-		if set and (set.dispel or 0) > 0 then
+		if set.dispel and set.dispel > 0 then
 			tooltip:AddDoubleLine(L["Dispels"], set.dispel, 1, 1, 1)
 		end
 	end
 
 	function mod:GetSetSummary(set)
-		return tostring(set.dispel or 0), set.dispel or 0
+		local dispels = set.dispel or 0
+		return tostring(dispels), dispels
 	end
 
 	do
 		local playerPrototype = Skada.playerPrototype
-		local wipe = wipe
 
 		function playerPrototype:GetDispelledSpells(tbl)
 			if self.dispelspells then
-				tbl = wipe(tbl or Skada.cacheTable)
+				tbl = clear(tbl or C)
 				for _, spell in pairs(self.dispelspells) do
 					if spell.spells then
 						for spellid, count in pairs(spell.spells) do
@@ -287,12 +287,13 @@ Skada:AddLoadableModule("Dispels", function(L)
 
 		function playerPrototype:GetDispelledTargets(tbl)
 			if self.dispelspells then
-				tbl = wipe(tbl or Skada.cacheTable)
+				tbl = clear(tbl or C)
 				for _, spell in pairs(self.dispelspells) do
 					if spell.targets then
 						for name, count in pairs(spell.targets) do
 							if not tbl[name] then
-								tbl[name] = {count = count}
+								tbl[name] = new()
+								tbl[name].count = count
 							else
 								tbl[name].count = tbl[name].count + count
 							end

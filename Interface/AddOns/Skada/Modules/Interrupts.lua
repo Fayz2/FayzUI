@@ -1,11 +1,11 @@
 local Skada = Skada
-Skada:AddLoadableModule("Interrupts", function(L)
+Skada:RegisterModule("Interrupts", function(L, P, _, C, new, _, clear)
 	if Skada:IsDisabled("Interrupts") then return end
 
-	local mod = Skada:NewModule(L["Interrupts"])
-	local spellmod = mod:NewModule(L["Interrupted spells"])
-	local targetmod = mod:NewModule(L["Interrupted targets"])
-	local playermod = mod:NewModule(L["Interrupt spells"])
+	local mod = Skada:NewModule("Interrupts")
+	local spellmod = mod:NewModule("Interrupted spells")
+	local targetmod = mod:NewModule("Interrupted targets")
+	local playermod = mod:NewModule("Interrupt spells")
 	local ignoredSpells = Skada.dummyTable -- Edit Skada\Core\Tables.lua
 	local _
 
@@ -21,7 +21,7 @@ Skada:AddLoadableModule("Interrupts", function(L)
 			set.interrupt = (set.interrupt or 0) + 1
 
 			-- to save up memory, we only record the rest to the current set.
-			if (set ~= Skada.total or Skada.db.profile.totalidc) and data.spellid then
+			if (set ~= Skada.total or P.totalidc) and data.spellid then
 				local spell = player.interruptspells and player.interruptspells[data.spellid]
 				if not spell then
 					player.interruptspells = player.interruptspells or {}
@@ -71,12 +71,12 @@ Skada:AddLoadableModule("Interrupts", function(L)
 
 		Skada:DispatchSets(log_interrupt, data)
 
-		if Skada.db.profile.modules.interruptannounce and srcGUID == Skada.userGUID then
+		if P.modules.interruptannounce and srcGUID == Skada.userGUID then
 			local spelllink = extraspellname or dstName
-			if Skada.db.profile.reportlinks then
+			if P.reportlinks then
 				spelllink = GetSpellLink(extraspellid or extraspellname) or spelllink
 			end
-			Skada:SendChat(format(L["%s interrupted!"], spelllink), Skada.db.profile.modules.interruptchannel or "SAY", "preset")
+			Skada:SendChat(format(L["%s interrupted!"], spelllink), P.modules.interruptchannel or "SAY", "preset")
 		end
 	end
 
@@ -274,28 +274,29 @@ Skada:AddLoadableModule("Interrupts", function(L)
 	end
 
 	function mod:AddToTooltip(set, tooltip)
-		if set and (set.interrupt or 0) > 0 then
+		if set.interrupt and set.interrupt > 0 then
 			tooltip:AddDoubleLine(L["Interrupts"], set.interrupt, 1, 1, 1)
 		end
 	end
 
 	function mod:GetSetSummary(set)
-		return tostring(set.interrupt or 0), set.interrupt or 0
+		local interrupts = set.interrupt or 0
+		return tostring(interrupts), interrupts
 	end
 
 	function mod:OnInitialize()
-		if not Skada.db.profile.modules.interruptchannel then
-			Skada.db.profile.modules.interruptchannel = "SAY"
+		if not P.modules.interruptchannel then
+			P.modules.interruptchannel = "SAY"
 		end
 
 		Skada.options.args.modules.args.interrupts = {
 			type = "group",
-			name = self.moduleName,
-			desc = format(L["Options for %s."], self.moduleName),
+			name = self.localeName,
+			desc = format(L["Options for %s."], self.localeName),
 			args = {
 				header = {
 					type = "description",
-					name = self.moduleName,
+					name = self.localeName,
 					fontSize = "large",
 					image = [[Interface\Icons\ability_kick]],
 					imageWidth = 18,
@@ -312,7 +313,7 @@ Skada:AddLoadableModule("Interrupts", function(L)
 				},
 				interruptannounce = {
 					type = "toggle",
-					name = format(L["Announce %s"], self.moduleName),
+					name = format(L["Announce %s"], self.localeName),
 					order = 10,
 					width = "double"
 				},
@@ -329,11 +330,10 @@ Skada:AddLoadableModule("Interrupts", function(L)
 
 	do
 		local playerPrototype = Skada.playerPrototype
-		local wipe = wipe
 
 		function playerPrototype:GetInterruptedSpells(tbl)
 			if self.interruptspells then
-				tbl = wipe(tbl or Skada.cacheTable)
+				tbl = clear(tbl or C)
 				for _, spell in pairs(self.interruptspells) do
 					if spell.spells then
 						for spellid, count in pairs(spell.spells) do
@@ -347,12 +347,13 @@ Skada:AddLoadableModule("Interrupts", function(L)
 
 		function playerPrototype:GetInterruptTargets(tbl)
 			if self.interruptspells then
-				tbl = wipe(tbl or Skada.cacheTable)
+				tbl = clear(tbl or C)
 				for _, spell in pairs(self.interruptspells) do
 					if spell.targets then
 						for name, count in pairs(spell.targets) do
 							if not tbl[name] then
-								tbl[name] = {count = count}
+								tbl[name] = new()
+								tbl[name].count = count
 							else
 								tbl[name].count = tbl[name].count + count
 							end

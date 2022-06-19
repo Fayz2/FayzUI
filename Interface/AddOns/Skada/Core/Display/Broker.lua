@@ -1,15 +1,15 @@
 local Skada = Skada
+
 local L = LibStub("AceLocale-3.0"):GetLocale("Skada")
-
-local name = L["Data Text"]
-local mod = Skada:NewModule(name)
-
+local mod = Skada:NewModule("Data Text")
 local LDB = LibStub:GetLibrary("LibDataBroker-1.1")
-local LibWindow = LibStub("LibWindow-1.1")
 
-local tsort, format = table.sort, string.format
+mod.SetTitle = Skada.EmptyFunc
+
+local wipe, tsort, format = wipe, table.sort, string.format
 local CloseDropDownMenus = CloseDropDownMenus
-
+local SavePosition = Skada.SavePosition
+local RestorePosition = Skada.RestorePosition
 local WrapTextInColorCode = Skada.WrapTextInColorCode
 local RGBPercToHex = Skada.RGBPercToHex
 local classcolors = nil
@@ -52,7 +52,7 @@ local function formatLabel(win, data)
 	if win.db.isusingclasscolors and data.class then
 		return classcolors(data.class, data.text or data.label or L["Unknown"])
 	elseif data.color and data.color.colorStr then
-		return format("|c%s%s|r", data.color.colorStr, data.text or data.label or L["Unknown"])
+		return format("\124c%s%s\124r", data.color.colorStr, data.text or data.label or L["Unknown"])
 	elseif data.color then
 		return WrapTextInColorCode(data.text or data.label or L["Unknown"], RGBPercToHex(data.color.r or 1, data.color.g or 1, data.color.b or 1, true))
 	else
@@ -65,9 +65,7 @@ local function formatValue(win, data)
 end
 
 local function clickHandler(win, frame, button)
-	if not win.obj then
-		return
-	end
+	if not win.obj then return end
 
 	if button == "LeftButton" and IsShiftKeyDown() then
 		Skada:OpenMenu(win)
@@ -121,54 +119,52 @@ end
 local ttactive = false
 
 function mod:Create(win, isnew)
-	if not classcolors then
-		classcolors = Skada.classcolors
-	end
+	local p = win.db
+	local frame = win.frame
 
 	-- Optional internal frame
-	if not win.frame then
-		win.frame = CreateFrame("Frame", win.db.name .. "BrokerFrame", UIParent)
-		win.frame:SetHeight(win.db.height or 30)
-		win.frame:SetWidth(win.db.width or 200)
-		win.frame:SetPoint("CENTER", 0, 0)
+	if not frame then
+		frame = CreateFrame("Frame", p.name .. "BrokerFrame", UIParent)
+		frame:SetHeight(p.height or 30)
+		frame:SetWidth(p.width or 200)
+		frame:SetPoint("CENTER", 0, 0)
 
-		-- Register with LibWindow-1.1.
-		LibWindow.RegisterConfig(win.frame, win.db)
-
-		-- Restore window position.
-		if isnew then
-			LibWindow.SavePosition(win.frame)
-		else
-			LibWindow.RestorePosition(win.frame)
-		end
-
-		local title = win.frame:CreateFontString("frameTitle", 6)
+		local title = frame:CreateFontString("frameTitle", 6)
 		title:SetPoint("CENTER", 0, 0)
-		win.frame.title = title
+		frame.title = title
 
-		win.frame:EnableMouse(true)
-		win.frame:SetMovable(true)
-		win.frame:RegisterForDrag("LeftButton")
-		win.frame:SetScript("OnMouseUp", function(frame, button) clickHandler(win, frame, button) end)
-		win.frame:SetScript("OnEnter", function(frame) tooltipHandler(win, GameTooltip) end)
-		win.frame:SetScript("OnLeave", function(frame) GameTooltip:Hide() end)
-		win.frame:SetScript("OnDragStart", function(frame)
-			if not win.db.barslocked then
+		frame:EnableMouse(true)
+		frame:SetMovable(true)
+		frame:RegisterForDrag("LeftButton")
+		frame:SetScript("OnMouseUp", function(frame, button) clickHandler(win, frame, button) end)
+		frame:SetScript("OnEnter", function(frame) tooltipHandler(win, GameTooltip) end)
+		frame:SetScript("OnLeave", function(frame) GameTooltip:Hide() end)
+		frame:SetScript("OnDragStart", function(self)
+			if not p.barslocked then
 				GameTooltip:Hide()
-				frame.isDragging = true
-				frame:StartMoving()
+				self.isDragging = true
+				self:StartMoving()
 			end
 		end)
-		win.frame:SetScript("OnDragStop", function(frame)
-			frame:StopMovingOrSizing()
-			frame.isDragging = false
-			LibWindow.SavePosition(frame)
+		frame:SetScript("OnDragStop", function(self)
+			self:StopMovingOrSizing()
+			self.isDragging = false
+			SavePosition(self, p)
 		end)
 	end
+
+	-- Restore window position.
+	if isnew then
+		SavePosition(frame, p)
+	else
+		RestorePosition(frame, p)
+	end
+
+	win.frame = frame
 
 	-- LDB object
 	if not win.obj then
-		win.obj = LDB:NewDataObject("Skada: " .. win.db.name, {
+		win.obj = LDB:NewDataObject("Skada: " .. p.name, {
 			type = "data source",
 			text = "",
 			OnTooltipShow = function(tooltip) tooltipHandler(win, tooltip) end,
@@ -214,9 +210,6 @@ function mod:Wipe(win)
 	win.text = " "
 end
 
-function mod:SetTitle(win, title)
-end
-
 function mod:Update(win)
 	if win.obj then
 		win.obj.text = ""
@@ -237,42 +230,38 @@ function mod:Update(win)
 	end
 end
 
-function mod:OnInitialize()
-end
-
+local fbackdrop = {}
 function mod:ApplySettings(win)
 	if win.db.useframe then
 		local title = win.frame.title
 		local db = win.db
 
-		win.frame:SetMovable(not win.db.barslocked)
-		win.frame:SetHeight(win.db.height or 30)
-		win.frame:SetWidth(win.db.width or 200)
-		local fbackdrop = {}
+		win.frame:SetMovable(not db.barslocked)
+		win.frame:SetHeight(db.height or 30)
+		win.frame:SetWidth(db.width or 200)
+		win.frame:SetScale(db.scale)
+		win.frame:SetFrameStrata(db.strata)
+
+		wipe(fbackdrop)
 		fbackdrop.bgFile = Skada:MediaFetch("background", db.background.texture)
 		fbackdrop.tile = db.background.tile
 		fbackdrop.tileSize = db.background.tilesize
 		win.frame:SetBackdrop(fbackdrop)
-		win.frame:SetBackdropColor(
-			db.background.color.r,
-			db.background.color.g,
-			db.background.color.b,
-			db.background.color.a
-		)
+		win.frame:SetBackdropColor(db.background.color.r, db.background.color.g, db.background.color.b, db.background.color.a)
 
 		Skada:ApplyBorder(win.frame, db.background.bordertexture, db.background.bordercolor, db.background.borderthickness, db.background.borderinsets)
 
 		local color = db.textcolor or {r = 1, g = 1, b = 1, a = 1}
 		title:SetTextColor(color.r, color.g, color.b, color.a)
 		title:SetFont(Skada:MediaFetch("font", db.barfont), db.barfontsize, db.barfontflags)
-		title:SetText(win.metadata.title or "Skada")
 		title:SetWordWrap(false)
 		title:SetJustifyH("CENTER")
 		title:SetJustifyV("MIDDLE")
-		title:SetHeight(win.db.height or 30)
+		title:SetHeight(db.height or 30)
+		title:SetText(win.metadata.title or "Skada")
 
-		win.frame:SetScale(db.scale)
-		win.frame:SetFrameStrata(db.strata)
+		-- restore position
+		RestorePosition(win.frame, db)
 
 		if db.hidden and win.frame:IsShown() then
 			win.frame:Hide()
@@ -282,11 +271,13 @@ function mod:ApplySettings(win)
 	else
 		win.frame:Hide()
 	end
+
 	self:Update(win)
 end
 
 function mod:AddDisplayOptions(win, options)
 	local db = win.db
+
 	options.main = {
 		type = "group",
 		name = L["Data Text"],
@@ -362,7 +353,7 @@ function mod:AddDisplayOptions(win, options)
 end
 
 function mod:OnInitialize()
-	self.name = name
+	classcolors = classcolors or Skada.classcolors
 	self.description = L["mod_broker_desc"]
 	Skada:AddDisplaySystem("broker", self)
 end

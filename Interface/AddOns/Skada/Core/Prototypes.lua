@@ -1,16 +1,17 @@
 local Skada = Skada
 
-local pairs, wipe, max = pairs, wipe, math.max
-local getmetatable, setmetatable, time = getmetatable, setmetatable, time
+local pairs, max = pairs, math.max
+local getmetatable, setmetatable = getmetatable, setmetatable
+local new, clear = Skada.newTable, Skada.clearTable
 
 -- a dummy table used as fallback
 local dummyTable = {}
 Skada.dummyTable = dummyTable
 
 -- this one should be used at modules level
-local T = Skada.Table
-local cacheTable = T.get("Skada_CacheTable")
+local cacheTable, cacheTable2 = {}, {}
 Skada.cacheTable = cacheTable
+Skada.cacheTable2 = cacheTable2
 
 -- prototypes declaration
 local setPrototype = {} -- sets
@@ -29,30 +30,39 @@ Skada.enemyPrototype = enemyPrototype
 -------------------------------------------------------------------------------
 -- segment/set prototype & functions
 
+local BITMASK_FRIENDLY = COMBATLOG_OBJECT_REACTION_FRIENDLY or 0x00000010
+local band, tremove = bit.band, tremove or table.remove
+
 -- binds a set table to set prototype
 function setPrototype:Bind(obj)
 	if obj and getmetatable(obj) ~= self then
-		setmetatable(obj, self)
-		self.__index = self
-
 		if obj.players then
-			for i = 1, #obj.players do
-				playerPrototype:Bind(obj.players[i], obj)
+			for i = #obj.players, 1, -1 do
+				local p = obj.players[i]
+				if p and p.flag and band(p.flag, BITMASK_FRIENDLY) == 0 then
+					tremove(obj.players, i) -- postfix
+				elseif p then
+					playerPrototype:Bind(p, obj)
+				end
 			end
 		end
 
 		if obj.enemies then
-			for i = 1, #obj.enemies do
+			for i = #obj.enemies, 1, -1 do
 				enemyPrototype:Bind(obj.enemies[i], obj)
 			end
 		end
+
+		setmetatable(obj, self)
+		self.__index = self
 	end
+
 	return obj
 end
 
 -- returns the segment's time
 function setPrototype:GetTime()
-	return max((self.time or 0) > 0 and self.time or (time() - self.starttime), 0.1)
+	return Skada:GetSetTime(self)
 end
 
 -- returns the actor's time if found (player or enemy)
@@ -63,59 +73,16 @@ end
 
 -- attempts to retrieve a player
 function setPrototype:GetPlayer(id, name)
-	if self.players and ((id and id ~= "total") or name) then
-		for i = 1, #self.players do
-			local actor = self.players[i]
-			if actor and ((id and actor.id == id) or (name and actor.name == name)) then
-				return playerPrototype:Bind(actor, self)
-			end
-		end
-	end
-
-	-- couldn't be found, rely on skada.
-	local actor = Skada:FindPlayer(self, id, name, true)
-	return actor and playerPrototype:Bind(actor, self)
+	return Skada:FindPlayer(self, id, name, true)
 end
 
 -- attempts to retrieve an enemy
 function setPrototype:GetEnemy(name, id)
-	if self.enemies and name then
-		for i = 1, #self.enemies do
-			local actor = self.enemies[i]
-			if actor and ((name and actor.name == name) or (id and actor.id == id)) then
-				return enemyPrototype:Bind(actor, self)
-			end
-		end
-	end
-
-	-- couldn't be found, rely on skada.
-	local actor = Skada:FindEnemy(self, name, id)
-	return actor and enemyPrototype:Bind(actor, self)
+	return Skada:FindEnemy(self, name, id)
 end
 
 -- attempts to find an actor (player or enemy)
 function setPrototype:GetActor(name, id)
-	-- player first.
-	if self.players and ((id and id ~= "total") or name) then
-		for i = 1, #self.players do
-			local actor = self.players[i]
-			if actor and ((id and actor.id == id) or (name and actor.name == name)) then
-				return playerPrototype:Bind(actor, self)
-			end
-		end
-	end
-
-	-- enemy second
-	if self.enemies and name then
-		for i = 1, #self.enemies do
-			local actor = self.enemies[i]
-			if actor and ((name and actor.name == name) or (id and actor.id == id)) then
-				return enemyPrototype:Bind(actor, self), true
-			end
-		end
-	end
-
-	-- couldn't be found, rely on skada.
 	return Skada:FindActor(self, id, name)
 end
 
@@ -165,7 +132,7 @@ function setPrototype:GetDPS(useful)
 	local dps, damage = 0, self:GetDamage(useful)
 
 	if damage > 0 then
-		dps = damage / max(1, self:GetTime())
+		dps = damage / self:GetTime()
 	end
 
 	return dps, damage
@@ -250,7 +217,7 @@ function setPrototype:GetDTPS()
 	local dtps, damage = 0, self:GetDamageTaken()
 
 	if damage > 0 then
-		dtps = damage / max(1, self:GetTime())
+		dtps = damage / self:GetTime()
 	end
 
 	return dtps, damage
@@ -314,7 +281,7 @@ end
 function setPrototype:GetHPS()
 	local heal = self:GetHeal()
 	if heal > 0 then
-		return heal / max(1, self:GetTime()), heal
+		return heal / self:GetTime(), heal
 	end
 	return 0, heal
 end
@@ -335,7 +302,7 @@ end
 function setPrototype:GetOHPS()
 	local overheal = self:GetOverheal()
 	if overheal > 0 then
-		return overheal / max(1, self:GetTime()), overheal
+		return overheal / self:GetTime(), overheal
 	end
 	return 0, overheal
 end
@@ -360,7 +327,7 @@ end
 function setPrototype:GetTHPS()
 	local heal = self:GetTotalHeal()
 	if heal > 0 then
-		return heal / max(1, self:GetTime()), heal
+		return heal / self:GetTime(), heal
 	end
 	return 0, heal
 end
@@ -381,7 +348,7 @@ end
 function setPrototype:GetAPS()
 	local absorb = self:GetAbsorb()
 	if absorb > 0 then
-		return absorb / max(1, self:GetTime()), absorb
+		return absorb / self:GetTime(), absorb
 	end
 	return 0, absorb
 end
@@ -411,7 +378,7 @@ end
 function setPrototype:GetAHPS()
 	local heal = self:GetAbsorbHeal()
 	if heal > 0 then
-		return heal / max(1, self:GetTime()), heal
+		return heal / self:GetTime(), heal
 	end
 	return 0, heal
 end
@@ -431,7 +398,6 @@ end
 
 -- for better dps calculation, we use active time for Arena/BGs.
 function actorPrototype:GetTime(active)
-	active = active or (self.super.type == "pvp") or (self.super.type == "arena")
 	return Skada:GetActiveTime(self.super, self, active)
 end
 
@@ -472,14 +438,24 @@ end
 
 -- returns the actor's damage targets table if found
 function actorPrototype:GetDamageTargets(tbl)
-	if self.damagespells then
-		tbl = wipe(tbl or cacheTable)
+	local damage = 0
 
+	if self.damagespells then
+		if Skada.db.profile.absdamage and self.totaldamage then
+			damage = self.totaldamage
+		elseif self.damage then
+			damage = self.damage
+		end
+
+		tbl = clear(tbl or cacheTable)
 		for _, spell in pairs(self.damagespells) do
 			if spell.targets then
 				for name, tar in pairs(spell.targets) do
 					if not tbl[name] then
-						tbl[name] = {amount = tar.amount, total = tar.total, overkill = tar.overkill}
+						tbl[name] = new()
+						tbl[name].amount = tar.amount
+						tbl[name].total = tar.total
+						tbl[name].overkill = tar.overkill
 					else
 						tbl[name].amount = tbl[name].amount + tar.amount
 						if tar.total then
@@ -505,7 +481,7 @@ function actorPrototype:GetDamageTargets(tbl)
 		end
 	end
 
-	return tbl
+	return tbl, damage
 end
 
 -- returns the damage on the given target
@@ -561,19 +537,25 @@ end
 
 -- returns the actors damage sources
 function actorPrototype:GetDamageSources(tbl)
-	if self.damagetakenspells then
-		tbl = wipe(tbl or cacheTable)
+	local damage = 0
 
+	if self.damagetakenspells then
+		if Skada.db.profile.absdamage and self.totaldamagetaken then
+			damage = self.totaldamagetaken
+		elseif self.damagetaken then
+			damage = self.damagetaken
+		end
+
+		tbl = clear(tbl or cacheTable)
 		for _, spell in pairs(self.damagetakenspells) do
 			if spell.sources then
 				for name, source in pairs(spell.sources) do
 					if not tbl[name] then
-						tbl[name] = {
-							amount = source.amount,
-							total = source.total,
-							overkill = source.overkill, -- nil for players
-							useful = source.useful, -- nil for enemies
-						}
+						tbl[name] = new()
+						tbl[name].amount = source.amount
+						tbl[name].total = source.total
+						tbl[name].overkill = source.overkill -- nil for players
+						tbl[name].useful = source.useful -- nil for enemies
 					else
 						tbl[name].amount = tbl[name].amount + source.amount
 						if source.total then
@@ -602,7 +584,7 @@ function actorPrototype:GetDamageSources(tbl)
 		end
 	end
 
-	return tbl
+	return tbl, damage
 end
 
 -- returns the actors damage from the given source
@@ -690,20 +672,23 @@ end
 -- returns the actor's heal targets table if found
 function actorPrototype:GetHealTargets(tbl)
 	if self.healspells then
-		tbl = wipe(tbl or cacheTable)
+		tbl = clear(tbl or cacheTable)
 
 		for _, spell in pairs(self.healspells) do
 			if spell.targets then
 				for name, target in pairs(spell.targets) do
 					if type(target) == "number" then
 						if not tbl[name] then
-							tbl[name] = {amount = target}
+							tbl[name] = new()
+							tbl[name].amount = target
 						else
 							tbl[name].amount = tbl[name].amount + target
 						end
 					else
 						if not tbl[name] then
-							tbl[name] = {amount = target.amount, overheal = target.overheal}
+							tbl[name] = new()
+							tbl[name].amount = target.amount
+							tbl[name].overheal = target.overheal
 						else
 							tbl[name].amount = tbl[name].amount + target.amount
 							if target.overheal then
@@ -755,14 +740,16 @@ end
 -- returns the table of overheal targets if found
 function actorPrototype:GetOverhealTargets(tbl)
 	if self.overheal and self.healspells then
-		tbl = wipe(tbl or cacheTable)
+		tbl = clear(tbl or cacheTable)
 
 		for _, spell in pairs(self.healspells) do
-			if (spell.overheal or 0) > 0 and spell.targets then
+			if spell.overheal and spell.overheal > 0 and spell.targets then
 				for name, target in pairs(spell.targets) do
-					if (target.overheal or 0) > 0 then
+					if target.overheal and target.overheal > 0 then
 						if not tbl[name] then
-							tbl[name] = {amount = target.overheal, total = target.amount + target.overheal}
+							tbl[name] = new()
+							tbl[name].amount = target.overheal
+							tbl[name].total = target.amount + target.overheal
 						else
 							tbl[name].amount = tbl[name].amount + target.overheal
 							tbl[name].total = tbl[name].total + target.amount + target.overheal
@@ -793,7 +780,7 @@ function actorPrototype:GetOverhealOnTarget(name)
 
 	if self.overheal and self.healspells and name then
 		for _, spell in pairs(self.healspells) do
-			if (spell.overheal or 0) > 0 and spell.targets and spell.targets[name] and spell.targets[name].overheal then
+			if spell.overheal and spell.overheal > 0 and spell.targets and spell.targets[name] and spell.targets[name].overheal then
 				overheal = overheal + spell.targets[name].overheal
 			end
 		end
@@ -805,20 +792,22 @@ end
 -- returns the total heal amount on the given target
 function actorPrototype:GetTotalHealTargets(tbl)
 	if self.healspells then
-		tbl = wipe(tbl or cacheTable)
+		tbl = clear(tbl or cacheTable)
 
 		for _, spell in pairs(self.healspells) do
 			if spell.targets then
 				for name, target in pairs(spell.targets) do
 					if type(target) == "number" then
 						if not tbl[name] then
-							tbl[name] = {amount = target}
+							tbl[name] = new()
+							tbl[name].amount = target
 						else
 							tbl[name].amount = tbl[name].amount + target
 						end
 					else
 						if not tbl[name] then
-							tbl[name] = {amount = target.amount + target.overheal}
+							tbl[name] = new()
+							tbl[name].amount = target.amount + target.overheal
 						else
 							tbl[name].amount = tbl[name].amount + target.amount + target.overheal
 						end
@@ -898,13 +887,14 @@ end
 -- returns the actor's absorb targets table if found
 function actorPrototype:GetAbsorbTargets(tbl)
 	if self.absorbspells then
-		tbl = wipe(tbl or cacheTable)
+		tbl = clear(tbl or cacheTable)
 
 		for _, spell in pairs(self.absorbspells) do
 			if spell.targets then
 				for name, amount in pairs(spell.targets) do
 					if not tbl[name] then
-						tbl[name] = {amount = amount}
+						tbl[name] = new()
+						tbl[name].amount = amount
 					else
 						tbl[name].amount = tbl[name].amount + amount
 					end
@@ -930,7 +920,7 @@ end
 -- returns the actor's absorb and heal targets table if found
 function actorPrototype:GetAbsorbHealTargets(tbl)
 	if self.healspells or self.absorbspells then
-		tbl = wipe(tbl or cacheTable)
+		tbl = clear(tbl or cacheTable)
 
 		-- absorb targets
 		if self.absorbspells then
@@ -938,7 +928,8 @@ function actorPrototype:GetAbsorbHealTargets(tbl)
 				if spell.targets then
 					for name, amount in pairs(spell.targets) do
 						if not tbl[name] then
-							tbl[name] = {amount = amount}
+							tbl[name] = new()
+							tbl[name].amount = amount
 						else
 							tbl[name].amount = tbl[name].amount + amount
 						end
@@ -965,13 +956,16 @@ function actorPrototype:GetAbsorbHealTargets(tbl)
 					for name, target in pairs(spell.targets) do
 						if type(target) == "number" then
 							if not tbl[name] then
-								tbl[name] = {amount = target}
+								tbl[name] = new()
+								tbl[name].amount = target
 							else
 								tbl[name].amount = tbl[name].amount + target
 							end
 						else
 							if not tbl[name] then
-								tbl[name] = {amount = target.amount, overheal = target.overheal}
+								tbl[name] = new()
+								tbl[name].amount = target.amount
+								tbl[name].overheal = target.overheal
 							else
 								tbl[name].amount = tbl[name].amount + target.amount
 								if target.overheal then

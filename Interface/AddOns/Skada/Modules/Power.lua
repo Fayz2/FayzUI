@@ -1,8 +1,8 @@
 local Skada = Skada
-Skada:AddLoadableModule("Resources", function(L)
+Skada:RegisterModule("Resources", function(L, P)
 	if Skada:IsDisabled("Resources") then return end
 
-	local mod = Skada:NewModule(L["Resources"])
+	local mod = Skada:NewModule("Resources")
 	mod.icon = [[Interface\Icons\spell_holy_rapture]]
 
 	local pairs, format = pairs, string.format
@@ -18,10 +18,10 @@ Skada:AddLoadableModule("Resources", function(L)
 
 	-- used to localize modules names.
 	local namesTable = {
-		[SPELL_POWER_MANA] = MANA,
-		[SPELL_POWER_RAGE] = RAGE,
-		[SPELL_POWER_ENERGY] = ENERGY,
-		[SPELL_POWER_RUNIC_POWER] = RUNIC_POWER
+		[SPELL_POWER_MANA] = "Mana",
+		[SPELL_POWER_RAGE] = "Rage",
+		[SPELL_POWER_ENERGY] = "Energy",
+		[SPELL_POWER_RUNIC_POWER] = "Runic Power"
 	}
 
 	-- used to store total amounts for sets and players
@@ -54,7 +54,7 @@ Skada:AddLoadableModule("Resources", function(L)
 			player[gainTable[gain.type]] = (player[gainTable[gain.type]] or 0) + gain.amount
 			set[gainTable[gain.type]] = (set[gainTable[gain.type]] or 0) + gain.amount
 
-			if (set ~= Skada.total or Skada.db.profile.totalidc) and gain.spellid then
+			if (set ~= Skada.total or P.totalidc) and gain.spellid then
 				player[spellTable[gain.type]] = player[spellTable[gain.type]] or {}
 				player[spellTable[gain.type]][gain.spellid] = (player[spellTable[gain.type]][gain.spellid] or 0) + gain.amount
 			end
@@ -63,12 +63,12 @@ Skada:AddLoadableModule("Resources", function(L)
 
 	local gain = {}
 
-	local function SpellEnergize(timestamp, eventtype, srcGUID, srcName, srcFlags, dstGUID, dstName, dstFlags, ...)
+	local function SpellEnergize(timestamp, eventtype, srcGUID, srcName, srcFlags, _, _, _, ...)
 		gain.spellid, _, _, gain.amount, gain.type = ...
 		if gain.spellid and not ignoredSpells[gain.spellid] then
-			gain.playerid = dstGUID
-			gain.playername = dstName
-			gain.playerflags = dstFlags
+			gain.playerid = srcGUID
+			gain.playername = srcName
+			gain.playerflags = srcFlags
 
 			Skada:FixPets(gain)
 
@@ -88,10 +88,11 @@ Skada:AddLoadableModule("Resources", function(L)
 	function basemod:Create(power)
 		if gainTable[power] then
 			local powername = namesTable[power]
-			local instance = Skada:NewModule(format(L["Power gained: %s"], powername))
+
+			local instance = Skada:NewModule(format("Power gained: %s", powername))
 			setmetatable(instance, basemod_mt)
 
-			local pmode = instance:NewModule(format(L["%s gained spells"], powername))
+			local pmode = instance:NewModule(format("%s gained spells", powername))
 			setmetatable(pmode, playermod_mt)
 
 			pmode.powerid = power
@@ -116,7 +117,7 @@ Skada:AddLoadableModule("Resources", function(L)
 	-- this is the main module update function that shows the list
 	-- of players depending on the selected power gain type.
 	function basemod:Update(win, set)
-		win.title = self.moduleName or L["Unknown"]
+		win.title = self.localeName or self.moduleName or L["Unknown"]
 		if win.class then
 			win.title = format("%s (%s)", win.title, L[win.class])
 		end
@@ -158,11 +159,8 @@ Skada:AddLoadableModule("Resources", function(L)
 
 	-- base function used to return sets summaries
 	function basemod:GetSetSummary(set)
-		if set and self.power then
-			local value = set[self.power] or 0
-			local valuetext = (self.power == "mana") and Skada:FormatNumber(value) or value
-			return valuetext, value
-		end
+		local value = self.power and set[self.power] or 0
+		return Skada:FormatNumber(value), value
 	end
 
 	-- player mods common Enter function.
@@ -173,7 +171,7 @@ Skada:AddLoadableModule("Resources", function(L)
 
 	-- player mods main update function
 	function playermod:Update(win, set)
-		win.title = format(L["%s's gained %s"], win.actorname or L["Unknown"], self.powername or L["Unknown"])
+		win.title = format(L["%s's gained %s"], win.actorname or L["Unknown"], L[self.powername])
 		if not set or not win.actorname then return end
 
 		local actor, enemy = set:GetActor(win.actorname, win.actorid)
@@ -218,16 +216,7 @@ Skada:AddLoadableModule("Resources", function(L)
 		self.metadata = {columns = {Amount = true, Percent = true, sPercent = true}}
 		Skada:AddColumnOptions(self)
 
-		local flags_src = {src_is_interesting = true}
-
-		Skada:RegisterForCL(
-			SpellEnergize,
-			"SPELL_ENERGIZE",
-			"SPELL_PERIODIC_ENERGIZE",
-			"SPELL_LEECH",
-			"SPELL_PERIODIC_LEECH",
-			flags_src
-		)
+		Skada:RegisterForCL(SpellEnergize, "SPELL_ENERGIZE", "SPELL_PERIODIC_ENERGIZE", {src_is_interesting = true})
 
 		manamod.metadata.icon = [[Interface\Icons\spell_frost_summonwaterelemental]]
 		ragemod.metadata.icon = [[Interface\Icons\spell_nature_shamanrage]]

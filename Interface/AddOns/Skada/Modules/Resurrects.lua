@@ -1,16 +1,16 @@
 local Skada = Skada
-Skada:AddLoadableModule("Resurrects", function(L)
+Skada:RegisterModule("Resurrects", function(L, P, _, C, new, _, clear)
 	if Skada:IsDisabled("Resurrects") then return end
 
-	local mod = Skada:NewModule(L["Resurrects"])
-	local playermod = mod:NewModule(L["Resurrect spell list"])
-	local targetmod = mod:NewModule(L["Resurrect target list"])
+	local mod = Skada:NewModule("Resurrects")
+	local playermod = mod:NewModule("Resurrect spell list")
+	local targetmod = mod:NewModule("Resurrect target list")
 
 	local pairs, tostring, format = pairs, tostring, string.format
 	local GetSpellInfo = Skada.GetSpellInfo or GetSpellInfo
 	local _
 
-	local spellschools = {
+	local resurrectSpells = {
 		-- Rebirth
 		[20484] = 0x08,
 		[20739] = 0x08,
@@ -22,7 +22,16 @@ Skada:AddLoadableModule("Resurrects", function(L)
 		-- Reincarnation
 		[16184] = 0x08,
 		[16209] = 0x08,
-		[20608] = 0x08
+		[20608] = 0x08,
+		[21169] = 0x08,
+		-- Use Soulstone
+		[3026] = 0x01,
+		[20758] = 0x01,
+		[20759] = 0x01,
+		[20760] = 0x01,
+		[20761] = 0x01,
+		[27240] = 0x01,
+		[47882] = 0x01
 	}
 
 	local function log_resurrect(set, data)
@@ -32,7 +41,7 @@ Skada:AddLoadableModule("Resurrects", function(L)
 			set.ress = (set.ress or 0) + 1
 
 			-- saving this to total set may become a memory hog deluxe.
-			if (set == Skada.total and not Skada.db.profile.totalidc) or not data.spellid then return end
+			if (set == Skada.total and not P.totalidc) or not data.spellid then return end
 
 			-- spell
 			local spell = player.resspells and player.resspells[data.spellid]
@@ -53,20 +62,24 @@ Skada:AddLoadableModule("Resurrects", function(L)
 
 	local data = {}
 
-	local function SpellResurrect(ts, event, srcGUID, srcName, srcFlags, dstGUID, dstName, dstFlags, spellid)
-		if not spellid then return end
+	local function SpellResurrect(_, event, srcGUID, srcName, srcFlags, _, dstName, _, spellid)
+		if spellid and (event == "SPELL_RESURRECT" or resurrectSpells[spellid]) then
+			data.spellid = spellid
 
-		data.spellid = spellid
+			if event == "SPELL_RESURRECT" then
+				data.playerid = srcGUID
+				data.playername = srcName
+				data.playerflags = srcFlags
+				data.dstName = dstName
+			else
+				data.playerid = srcGUID
+				data.playername = srcName
+				data.playerflags = srcFlags
+				data.dstName = srcName
+			end
 
-		data.playerid = srcGUID
-		data.playername = srcName
-		data.playerflags = srcFlags
-
-		data.dstGUID = dstGUID
-		data.dstName = dstName
-		data.dstFlags = dstFlags
-
-		Skada:DispatchSets(log_resurrect, data)
+			Skada:DispatchSets(log_resurrect, data)
+		end
 	end
 
 	function playermod:Enter(win, id, label)
@@ -95,7 +108,7 @@ Skada:AddLoadableModule("Resurrects", function(L)
 				d.id = spellid
 				d.spellid = spellid
 				d.label, _, d.icon = GetSpellInfo(spellid)
-				d.spellschool = spellschools[spellid]
+				d.spellschool = resurrectSpells[spellid]
 
 				d.value = spell.count
 				d.valuetext = Skada:FormatValueCols(
@@ -211,6 +224,12 @@ Skada:AddLoadableModule("Resurrects", function(L)
 			{src_is_interesting = true, dst_is_interesting = true}
 		)
 
+		Skada:RegisterForCL(
+			SpellResurrect,
+			"SPELL_CAST_SUCCESS",
+			{src_is_interesting = true, dst_is_not_interesting = true}
+		)
+
 		Skada:AddMode(self)
 	end
 
@@ -219,26 +238,27 @@ Skada:AddLoadableModule("Resurrects", function(L)
 	end
 
 	function mod:AddToTooltip(set, tooltip)
-		if (set.ress or 0) > 0 then
+		if set.ress and set.ress > 0 then
 			tooltip:AddDoubleLine(L["Resurrects"], set.ress, 1, 1, 1)
 		end
 	end
 
 	function mod:GetSetSummary(set)
-		return tostring(set.ress or 0), set.ress or 0
+		local ress = set.ress or 0
+		return tostring(ress), ress
 	end
 
 	do
 		local playerPrototype = Skada.playerPrototype
-
 		function playerPrototype:GetRessTargets(tbl)
 			if self.resspells then
-				tbl = wipe(tbl or Skada.cacheTable)
+				tbl = clear(tbl or C)
 				for _, spell in pairs(self.resspells) do
 					if spell.targets then
 						for name, count in pairs(spell.targets) do
 							if not tbl[name] then
-								tbl[name] = {count = count}
+								tbl[name] = new()
+								tbl[name].count = count
 							else
 								tbl[name].count = tbl[name].count + count
 							end

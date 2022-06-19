@@ -2,10 +2,10 @@ local Skada = Skada
 
 local L = LibStub("AceLocale-3.0"):GetLocale("Skada")
 
-local select, pairs = select, pairs
+local select, pairs, type = select, pairs, type
 local tostring, tonumber, format = tostring, tonumber, string.format
 local setmetatable, getmetatable, wipe, band = setmetatable, getmetatable, wipe, bit.band
-local print = print
+local next, print = next, print
 
 local GetNumRaidMembers, GetNumPartyMembers = GetNumRaidMembers, GetNumPartyMembers
 local UnitExists, UnitGUID, UnitClass = UnitExists, UnitGUID, UnitClass
@@ -14,6 +14,7 @@ local GetSpellInfo, GetSpellLink = GetSpellInfo, GetSpellLink
 local GetPlayerInfoByGUID = GetPlayerInfoByGUID
 local GetClassFromGUID = Skada.GetClassFromGUID
 local T = Skada.Table
+local _
 
 local COMBATLOG_OBJECT_TYPE_NPC = COMBATLOG_OBJECT_TYPE_NPC or 0x00000800
 
@@ -22,7 +23,7 @@ local COMBATLOG_OBJECT_TYPE_NPC = COMBATLOG_OBJECT_TYPE_NPC or 0x00000800
 
 function Skada:Debug(...)
 	if self.db.profile.debug then
-		print("|cff33ff99Skada Debug|r:", ...)
+		print("\124cff33ff99Skada Debug\124r:", ...)
 	end
 end
 
@@ -65,7 +66,7 @@ function Skada:RegisterClasses()
 			color.colorStr = Skada.RGBPercToHex(color.r, color.g, color.b, true)
 		end
 
-		return (arg == nil) and color or (type(arg) == "string") and format("|c%s%s|r", color.colorStr, arg) or color.colorStr
+		return (arg == nil) and color or (type(arg) == "string") and format("\124c%s%s\124r", color.colorStr, arg) or color.colorStr
 	end})
 
 	-- set classes icon file & Skada custom classes.
@@ -254,13 +255,16 @@ function Skada:RegisterSchools()
 	self.spellschools = self.spellschools or {}
 
 	-- handles adding spell schools
+	local order = {}
 	local function add_school(key, name, r, g, b)
 		if key and name and not self.spellschools[key] then
 			self.spellschools[key] = {r = r or 1, g = g or 1, b = b or 1, name = name:match("%((.+)%)") or name}
+			order[#order + 1] = key
 		end
 	end
 
 	-- main school
+	local SCHOOL_NONE = SCHOOL_MASK_NONE or 0x00 -- None
 	local SCHOOL_PHYSICAL = SCHOOL_MASK_PHYSICAL or 0x01 -- Physical
 	local SCHOOL_HOLY = SCHOOL_MASK_HOLY or 0x02 -- Holy
 	local SCHOOL_FIRE = SCHOOL_MASK_FIRE or 0x04 -- Fire
@@ -270,6 +274,7 @@ function Skada:RegisterSchools()
 	local SCHOOL_ARCANE = SCHOOL_MASK_ARCANE or 0x40 -- Arcane
 
 	-- Single Schools
+	add_school(SCHOOL_NONE, STRING_SCHOOL_UNKNOWN, 1, 1, 1) -- Unknown
 	add_school(SCHOOL_PHYSICAL, STRING_SCHOOL_PHYSICAL, 1, 1, 0) -- Physical
 	add_school(SCHOOL_HOLY, STRING_SCHOOL_HOLY, 1, 0.9, 0.5) -- Holy
 	add_school(SCHOOL_FIRE, STRING_SCHOOL_FIRE, 1, 0.5, 0) -- Fire
@@ -278,16 +283,61 @@ function Skada:RegisterSchools()
 	add_school(SCHOOL_SHADOW, STRING_SCHOOL_SHADOW, 0.5, 0.5, 1) -- Shadow
 	add_school(SCHOOL_ARCANE, STRING_SCHOOL_ARCANE, 1, 0.5, 1) -- Arcane
 
-	-- Multiple Schools (can be extended if needed)
-	add_school(SCHOOL_FIRE + SCHOOL_FROST, STRING_SCHOOL_FROSTFIRE, 0.5, 1, 1) -- Frostfire
-	add_school(SCHOOL_PHYSICAL + SCHOOL_SHADOW, STRING_SCHOOL_SHADOWSTRIKE, 0.5, 0.5, 1) -- Shadowstrike
-
-	setmetatable(self.spellschools, {__call = function(t, school)
-		if school and t[school] then
-			return t[school].name, t[school].r, t[school].g, t[school].b
+	-- reference to CombatLog_String_SchoolString
+	local colorFunc = CombatLog_Color_ColorArrayBySchool
+	local function GetSchoolName(key)
+		if not nameFunc then -- late availability
+			nameFunc = CombatLog_String_SchoolString
 		end
-		return L["Unknown"], 1, 1, 1
-	end})
+
+		local name = nameFunc(key)
+		local isnone = (name == STRING_SCHOOL_UNKNOWN)
+		return name:match("%((.+)%)") or name, isnone
+	end
+
+	-- reference to COMBATLOG_DEFAULT_COLORS.schoolColoring
+	local colorTable = COMBATLOG_DEFAULT_COLORS and COMBATLOG_DEFAULT_COLORS.schoolColoring
+	local function GetSchoolColor(key)
+		if not colorTable then -- late availability
+			colorTable = COMBATLOG_DEFAULT_COLORS and COMBATLOG_DEFAULT_COLORS.schoolColoring
+		end
+
+		local r, g, b = 1.0, 1.0, 1.0
+
+		if colorTable and colorTable[key] then
+			r = colorTable[key].r or r
+			g = colorTable[key].g or g
+			b = colorTable[key].b or b
+		elseif colorTable then
+			for i = #order, 1, -1 do
+				local k = order[i]
+				if band(key, k) == k then
+					r = colorTable[k].r or r
+					g = colorTable[k].g or g
+					b = colorTable[k].b or b
+					break
+				end
+			end
+		end
+
+		return r, g, b
+	end
+
+	setmetatable(self.spellschools, {
+		__index = function(t, key)
+			local name, isnone = GetSchoolName(key)
+			if not isnone then
+				local r, g, b = GetSchoolColor(key)
+				t[key] = {name = name, r = r, g = g, b = b}
+				return t[key]
+			end
+			return t[0x00] -- unknown
+		end,
+		__call = function(t, key)
+			local school = t[key]
+			return school.name, school.r, school.g, school.b
+		end
+	})
 end
 
 -------------------------------------------------------------------------------
@@ -343,30 +393,37 @@ end
 -- boss and creature functions
 
 do
-	local LBI = LibStub("LibBossIDs-1.0")
 	local creatureToFight = Skada.creatureToFight or Skada.dummyTable
 	local creatureToBoss = Skada.creatureToBoss or Skada.dummyTable
 
 	-- checks if the provided guid is a boss
-	-- returns a boolean, boss id and boss name
-	function Skada:IsBoss(guid, name)
+	function Skada:IsBoss(guid, strict)
 		local id = self.GetCreatureId(guid)
-
-		if LBI.BossIDs[id] or creatureToFight[id] or creatureToBoss[id] then
-			-- should fix id?
-			if creatureToBoss[id] and creatureToBoss[id] ~= true then
-				id = creatureToBoss[id]
+		if creatureToBoss[id] and creatureToBoss[id] ~= true then
+			if strict then
+				return false
 			end
-
-			-- should fix name?
-			if creatureToFight[id] and name ~= creatureToFight[id] then
-				name = creatureToFight[id]
-			end
-
-			return true, id, name
+			return true, id
+		elseif creatureToBoss[id] or creatureToFight[id] then
+			return true, id
 		end
+		return false
+	end
 
-		return false, (self:IsCreature(guid) and id or 0), name
+	function Skada:IsEncounter(guid, name)
+		local isboss, id = self:IsBoss(guid, nil, "IsEncounter")
+		if isboss and id then
+			if creatureToBoss[id] and creatureToBoss[id] ~= true then
+				return true, creatureToBoss[id], creatureToFight[id] or name
+			end
+
+			if creatureToFight[id] then
+				return true, true, creatureToFight[id] or name
+			end
+
+			return true, id, creatureToFight[id] or name
+		end
+		return false
 	end
 end
 
@@ -386,15 +443,18 @@ end
 function Skada.unitClass(guid, flag, set, db, name)
 	set = set or Skada.current
 	if set then
-		-- an existing player
-		for i = 1, #set.players do
-			local p = set.players[i]
-			if p and p.id == guid then
-				return p.class, p.role, p.spec
-			elseif p and name and p.name == name and p.class and Skada.validclass[p.class] then
-				return p.class, p.role, p.spec
+		-- an existing player?
+		if set.players then
+			for i = 1, #set.players do
+				local p = set.players[i]
+				if p and p.id == guid then
+					return p.class, p.role, p.spec
+				elseif p and name and p.name == name and p.class and Skada.validclass[p.class] then
+					return p.class, p.role, p.spec
+				end
 			end
 		end
+		-- an existing enemy?
 		if set.enemies then
 			for i = 1, #set.enemies do
 				local e = set.enemies[i]
@@ -414,7 +474,7 @@ function Skada.unitClass(guid, flag, set, db, name)
 		end
 	elseif Skada:IsPet(guid, flag) then
 		class = "PET"
-	elseif Skada:IsBoss(guid) then
+	elseif Skada:IsBoss(guid, true) then
 		class = "BOSS"
 	elseif Skada:IsCreature(guid, flag) then
 		class = "MONSTER"
@@ -432,12 +492,12 @@ end
 
 do
 	local customSpells = {
-		[3] = {ACTION_ENVIRONMENTAL_DAMAGE_FALLING, [[Interface\Icons\ability_rogue_quickrecovery]]},
-		[4] = {ACTION_ENVIRONMENTAL_DAMAGE_DROWNING, [[Interface\Icons\spell_shadow_demonbreath]]},
-		[5] = {ACTION_ENVIRONMENTAL_DAMAGE_FATIGUE, [[Interface\Icons\ability_creature_cursed_05]]},
-		[6] = {ACTION_ENVIRONMENTAL_DAMAGE_FIRE, [[Interface\Icons\spell_fire_fire]]},
-		[7] = {ACTION_ENVIRONMENTAL_DAMAGE_LAVA, [[Interface\Icons\spell_shaman_lavaflow]]},
-		[8] = {ACTION_ENVIRONMENTAL_DAMAGE_SLIME, [[Interface\Icons\inv_misc_slime_01]]}
+		[3] = {L["Falling"], [[Interface\Icons\ability_rogue_quickrecovery]]},
+		[4] = {L["Drowning"], [[Interface\Icons\spell_shadow_demonbreath]]},
+		[5] = {L["Fatigue"], [[Interface\Icons\ability_creature_cursed_05]]},
+		[6] = {L["Fire"], [[Interface\Icons\spell_fire_fire]]},
+		[7] = {L["Lava"], [[Interface\Icons\spell_shaman_lavaflow]]},
+		[8] = {L["Slime"], [[Interface\Icons\inv_misc_slime_01]]}
 	}
 
 	function Skada.GetSpellInfo(spellid)
@@ -451,6 +511,8 @@ do
 					res3 = [[Interface\Icons\INV_Weapon_Bow_07]]
 				elseif spellid == 6603 then
 					res1, res3 = L["Melee"], [[Interface\Icons\INV_Sword_04]]
+				elseif spellid == 47882 or spellid == 27240 or spellid == 20761 or spellid == 20760 or spellid == 20759 or spellid == 20758 or spellid == 3026 then
+					res3 = [[Interface\Icons\Spell_Shadow_Soulgem]]
 				end
 			end
 		end
@@ -532,7 +594,6 @@ do
 		wipe(fakeSet)
 		fakeSet.name = "Fake Fight"
 		fakeSet.starttime = time() - 120
-		fakeSet.endtime = time()
 		fakeSet.damage = 0
 		fakeSet.heal = 0
 		fakeSet.absorb = 0
@@ -581,6 +642,8 @@ do
 	end
 
 	local function RandomizeFakeData(set, coef)
+		set.time = time() - set.starttime
+
 		for i = 1, #set.players do
 			local player = playerPrototype:Bind(set.players[i], set)
 			if player then
@@ -820,7 +883,7 @@ do
 						isPercent = true,
 						order = 40
 					},
-					empty_1 = {
+					empty_2 = {
 						type = "description",
 						name = " ",
 						width = "full",
@@ -1070,6 +1133,7 @@ function Skada:ApplyBorder(frame, texture, color, thickness, padtop, padbottom, 
 		frame.borderFrame:SetFrameLevel(frame:GetFrameLevel() - 1)
 	end
 
+	thickness = thickness or 0
 	padtop = padtop or 0
 	padbottom = padbottom or padtop
 	padleft = padleft or padtop
@@ -1085,5 +1149,183 @@ function Skada:ApplyBorder(frame, texture, color, thickness, padtop, padbottom, 
 	T.free("Skada_BorderBackdrop", borderbackdrop)
 	if color then
 		frame.borderFrame:SetBackdropBorderColor(color.r, color.g, color.b, color.a)
+	end
+end
+
+-------------------------------------------------------------------------------
+-- data serialization
+
+do
+	local AceSerializer = LibStub("AceSerializer-3.0")
+	local LibCompress = LibStub("LibCompress")
+	local encodeTable = nil
+
+	function Skada:Serialize(hex, title, ...)
+		local result = LibCompress:CompressHuffman(AceSerializer:Serialize(...))
+		if hex then
+			return self.HexEncode(result, title)
+		end
+
+		encodeTable = encodeTable or LibCompress:GetAddonEncodeTable()
+		return encodeTable:Encode(result)
+	end
+
+	function Skada:Deserialize(data, hex)
+		local err
+		if hex then
+			data, err = self.HexDecode(data)
+		else
+			encodeTable = encodeTable or LibCompress:GetAddonEncodeTable()
+			data, err = encodeTable:Decode(data), "Error decoding"
+		end
+
+		if data then
+			data, err = LibCompress:DecompressHuffman(data)
+			if data then
+				return AceSerializer:Deserialize(data)
+			end
+		end
+		return false, err
+	end
+end
+
+-------------------------------------------------------------------------------
+-- addon communication
+
+do
+	local UnitIsConnected = UnitIsConnected
+	local IsInGroup, IsInRaid = Skada.IsInGroup, Skada.IsInRaid
+
+	local function SendCommMessage(self, channel, target, ...)
+		if target == self.userName or not IsInGroup() then return end
+
+		if not channel then
+			channel = IsInRaid() and "RAID" or "PARTY"
+
+			-- check arena/battlegrounds
+			if self.insType == "pvp" or self.insType == "arena" then
+				channel = "BATTLEGROUND"
+			end
+		end
+
+		if channel == "WHISPER" and not (target and UnitIsConnected(target)) then
+			return
+		elseif channel then
+			self:SendCommMessage("Skada", self:Serialize(false, nil, ...), channel, target)
+		end
+	end
+
+	local function DispatchComm(sender, ok, const, ...)
+		if ok and Skada.comms and type(const) == "string" and Skada.comms[const] then
+			for self, funcs in pairs(Skada.comms[const]) do
+				for func in pairs(funcs) do
+					if type(self[func]) == "function" then
+						self[func](self, sender, ...)
+					elseif type(func) == "function" then
+						func(sender, ...)
+					end
+				end
+			end
+		end
+	end
+
+	local function OnCommReceived(self, prefix, message, channel, sender)
+		if prefix == "Skada" and channel and sender and sender ~= self.userName then
+			DispatchComm(sender, self:Deserialize(message))
+		end
+	end
+
+	function Skada:RegisterComms(enable)
+		if enable then
+			self.SendComm = SendCommMessage
+			self.OnCommReceived = OnCommReceived
+			self:RegisterComm("Skada")
+			self:AddComm("VersionCheck")
+		else
+			self.SendComm = self.EmptyFunc
+			self.OnCommReceived = self.EmptyFunc
+			self:UnregisterAllComm()
+			self:RemoveAllComms()
+		end
+
+		self.callbacks:Fire("Skada_UpdateComms", enable)
+	end
+
+	function Skada.AddComm(self, const, func)
+		if self and const then
+			Skada.comms = Skada.comms or {}
+			Skada.comms[const] = Skada.comms[const] or {}
+			Skada.comms[const][self] = Skada.comms[const][self] or {}
+			Skada.comms[const][self][func or const] = true
+		end
+	end
+
+	function Skada.RemoveComm(self, func)
+		if self and Skada.comms then
+			for const, selfs in pairs(Skada.comms) do
+				if selfs[self] then
+					selfs[self][func] = nil
+
+					-- remove the table if empty
+					if next(selfs[self]) == nil then
+						selfs[self] = nil
+					end
+
+					break
+				end
+			end
+		end
+	end
+
+	function Skada.RemoveAllComms(self)
+		if self and Skada.comms then
+			for const, selfs in pairs(Skada.comms) do
+				for _self in pairs(selfs) do
+					if self == _self then
+						selfs[self] = nil
+						break
+					end
+				end
+			end
+		end
+	end
+end
+
+-------------------------------------------------------------------------------
+-- instance difficulty
+
+do
+	local GetRaidDifficulty = GetRaidDifficulty
+	local GetDungeonDifficulty = GetDungeonDifficulty
+
+	function Skada:GetInstanceDiff()
+		local _, insType, diff, _, count, dynDiff, isDynamic = GetInstanceInfo()
+		if insType == "none" then
+			return diff == 1 and "wb" or "NaN" -- World Boss
+		elseif insType == "raid" and isDynamic then
+			if diff == 1 or diff == 3 then
+				return (dynDiff == 0) and "10n" or (dynDiff == 1) and "10h" or "NaN"
+			elseif diff == 2 or diff == 4 then
+				return (dynDiff == 0) and "25n" or (dynDiff == 1) and "25h" or "NaN"
+			end
+		elseif insType then
+			if diff == 1 then
+				local comp_diff = GetRaidDifficulty()
+				if diff ~= comp_diff and (comp_diff == 2 or comp_diff == 4) then
+					return "tw" -- timewalker
+				else
+					return count and format("%dn", count) or "10n"
+				end
+			else
+				return diff == 2 and "25n" or diff == 3 and "10h" or diff == 4 and "25h" or "NaN"
+			end
+		elseif insType == "party" then
+			if diff == 1 then
+				return "5n"
+			elseif diff == 2 then
+				local comp_diff = GetDungeonDifficulty()
+				return comp_diff == 3 and "mc" or "5h" -- mythic or heroic 5man
+			end
+		end
 	end
 end

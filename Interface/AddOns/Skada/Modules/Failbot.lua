@@ -2,12 +2,12 @@ local LibFail = LibStub("LibFail-1.0", true)
 if not LibFail then return end
 
 local Skada = Skada
-Skada:AddLoadableModule("Fails", function(L)
+Skada:RegisterModule("Fails", function(L, P)
 	if Skada:IsDisabled("Fails") then return end
 
-	local mod = Skada:NewModule(L["Fails"])
-	local playermod = mod:NewModule(L["Player's failed events"])
-	local spellmod = mod:NewModule(L["Event's failed players"])
+	local mod = Skada:NewModule("Fails")
+	local playermod = mod:NewModule("Player's failed events")
+	local spellmod = mod:NewModule("Event's failed players")
 	local ignoredSpells = Skada.dummyTable -- Edit Skada\Core\Tables.lua
 
 	local pairs, tostring, format, tContains = pairs, tostring, string.format, tContains
@@ -21,7 +21,7 @@ Skada:AddLoadableModule("Fails", function(L)
 			set.fail = (set.fail or 0) + 1
 
 			-- saving this to total set may become a memory hog deluxe.
-			if set ~= Skada.total or Skada.db.profile.totalidc then
+			if set ~= Skada.total or P.totalidc then
 				player.failspells = player.failspells or {}
 				player.failspells[spellid] = (player.failspells[spellid] or 0) + 1
 			end
@@ -173,6 +173,7 @@ Skada:AddLoadableModule("Fails", function(L)
 		-- no total click.
 		playermod.nototal = true
 
+		Skada.RegisterMessage(self, "COMBAT_PLAYER_LEAVE", "CombatLeave")
 		Skada:AddMode(self)
 
 		-- table of ignored spells:
@@ -182,15 +183,17 @@ Skada:AddLoadableModule("Fails", function(L)
 	end
 
 	function mod:OnDisable()
+		Skada.UnregisterAllMessages(self)
 		Skada:RemoveMode(self)
 	end
 
 	function mod:GetSetSummary(set)
-		return tostring(set.fail or 0), set.fail or 0
+		local fails = set.fail or 0
+		return tostring(fails), fails
 	end
 
 	function mod:AddToTooltip(set, tooltip)
-		if set and (set.fail or 0) > 0 then
+		if set.fail and set.fail > 0 then
 			tooltip:AddDoubleLine(L["Fails"], set.fail, 1, 1, 1)
 		end
 	end
@@ -203,12 +206,12 @@ Skada:AddLoadableModule("Fails", function(L)
 			if not options then
 				options = {
 					type = "group",
-					name = mod.moduleName,
-					desc = format(L["Options for %s."], mod.moduleName),
+					name = mod.localeName,
+					desc = format(L["Options for %s."], mod.localeName),
 					args = {
 						header = {
 							type = "description",
-							name = mod.moduleName,
+							name = mod.localeName,
 							fontSize = "large",
 							image = [[Interface\Icons\ability_creature_cursed_01]],
 							imageWidth = 18,
@@ -250,20 +253,20 @@ Skada:AddLoadableModule("Fails", function(L)
 				LibFail:RegisterCallback(events[i], onFail)
 			end
 
-			if Skada.db.profile.modules.failschannel == nil then
-				Skada.db.profile.modules.failschannel = "AUTO"
+			if P.modules.failschannel == nil then
+				P.modules.failschannel = "AUTO"
 			end
-			if Skada.db.profile.modules.ignoredfails then
-				Skada.db.profile.modules.ignoredfails = nil
+			if P.modules.ignoredfails then
+				P.modules.ignoredfails = nil
 			end
 
 			Skada.options.args.modules.args.failbot = GetOptions()
 		end
 	end
 
-	function mod:SetComplete(set)
-		if (set.fail or 0) > 0 and Skada.db.profile.modules.failsannounce then
-			local channel = Skada.db.profile.modules.failschannel or "AUTO"
+	function mod:CombatLeave(_, set)
+		if set and set.fail and set.fail > 0 and P.modules.failsannounce then
+			local channel = P.modules.failschannel or "AUTO"
 			if channel == "SELF" or channel == "GUILD" or IsInGroup() then
 				Skada:Report(channel, "preset", L["Fails"], nil, 10)
 			end

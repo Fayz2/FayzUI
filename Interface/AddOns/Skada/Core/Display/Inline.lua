@@ -1,13 +1,17 @@
 local Skada = Skada
 
-local mod = Skada:NewModule("InlineDisplay")
-local LibWindow = LibStub("LibWindow-1.1")
+local mod = Skada:NewModule("Inline Bar Display")
 local L = LibStub("AceLocale-3.0"):GetLocale("Skada")
 
 local pairs, tostring, type = pairs, tostring, type
 local strrep, format, _match = string.rep, string.format, string.match
 local tinsert, tremove, tsort = table.insert, table.remove, table.sort
+local GameTooltip = GameTooltip
+local GetScreenWidth = GetScreenWidth
+local GetScreenHeight = GetScreenHeight
 local CloseDropDownMenus = CloseDropDownMenus
+local SavePosition = Skada.SavePosition
+local RestorePosition = Skada.RestorePosition
 
 local mybars = {}
 local barlibrary = {bars = {}, nextuuid = 1}
@@ -29,15 +33,6 @@ if not FONT_FLAGS then
 	}
 	Skada.fontFlags = FONT_FLAGS
 end
-
-local buttonBackdrop = {
-	bgFile = [[Interface\Buttons\UI-OptionsButton]],
-	edgeFile = [[Interface\Buttons\UI-OptionsButton]],
-	tile = true,
-	tileSize = 12,
-	edgeSize = 0,
-	insets = {left = 0, right = 0, top = 0, bottom = 0}
-}
 
 local buttonTexture = [[Interface\AddOns\Skada\Media\Textures\toolbar%s\config.blp]]
 
@@ -68,9 +63,6 @@ local function serial(val, name, skipnewlines, depth)
 	return tmp
 end
 
-function mod:OnInitialize()
-end
-
 local function BarLeave(bar)
 	if ttactive then
 		GameTooltip:Hide()
@@ -95,9 +87,7 @@ local function onEnter(win, id, label, mode)
 end
 
 local function showmode(win, id, label, mode)
-	if Skada:NoTotalClick(win.selectedset, mode) then
-		return
-	end
+	if Skada:NoTotalClick(win.selectedset, mode) then return end
 
 	inserthistory(win)
 
@@ -111,10 +101,11 @@ local function showmode(win, id, label, mode)
 	end
 
 	CloseDropDownMenus()
+	GameTooltip:Hide()
 end
 
 local function BarClick(win, bar, button)
-	if bar.ignore then return end
+	if Skada.testMode or bar.ignore then return end
 
 	local id, label = bar.valueid, bar.valuetext
 
@@ -126,7 +117,7 @@ local function BarClick(win, bar, button)
 		win:RightClick(bar, button)
 	elseif button == "LeftButton" and win.metadata.click2 and IsShiftKeyDown() then
 		showmode(win, id, label, win.metadata.click2)
-	elseif button == "LeftButton" and not Skada.Ascension and win.metadata.click4 and IsAltKeyDown() then
+	elseif button == "LeftButton" and (not Skada.Ascension or Skada.AscensionCoA) and win.metadata.click4 and IsAltKeyDown() then
 		showmode(win, id, label, win.metadata.click4)
 	elseif button == "LeftButton" and win.metadata.click3 and IsControlKeyDown() then
 		showmode(win, id, label, win.metadata.click3)
@@ -136,7 +127,7 @@ local function BarClick(win, bar, button)
 end
 
 local function frameOnMouseDown(self, button)
-	if button == "RightButton" then
+	if button == "RightButton" and not Skada.testMode then
 		self.win:RightClick(nil, button)
 	end
 end
@@ -152,7 +143,7 @@ end
 local function frameOnDragStop(self)
 	self:StopMovingOrSizing()
 	self.isDragging = false
-	LibWindow.SavePosition(self)
+	SavePosition(self, self.win.db)
 end
 
 local function titleOnMouseDown(self, button)
@@ -172,92 +163,81 @@ local function menuOnClick(self, button)
 end
 
 function mod:Create(window, isnew)
-	if not classcolors then
-		classcolors = Skada.classcolors
-	end
+	local p = window.db
+	local frame = window.frame
 
-	if not window.frame then
-		window.frame = CreateFrame("Frame", window.db.name .. "InlineFrame", UIParent)
-		window.frame.win = window
-		window.frame:SetFrameLevel(5)
-		window.frame:SetClampedToScreen(true)
+	if not frame then
+		frame = CreateFrame("Frame", p.name .. "InlineFrame", UIParent)
+		frame:SetFrameLevel(1)
 
-		if window.db.height == 15 then
-			window.db.height = 23
+		if p.height == 15 then
+			p.height = 23
 		end
-		window.frame:SetHeight(window.db.height)
-		window.frame:SetWidth(window.db.width or GetScreenWidth())
-		window.frame:ClearAllPoints()
-		window.frame:SetPoint("BOTTOM", -1)
-		window.frame:SetPoint("LEFT", -1)
-		if window.db.background.color.a == 51 / 255 then
-			window.db.background.color = {r = 255, b = 250 / 255, g = 250 / 255, a = 1}
+
+		frame:SetHeight(p.height)
+		frame:SetWidth(p.width or GetScreenWidth())
+		frame:ClearAllPoints()
+		frame:SetPoint("BOTTOM", -1)
+		frame:SetPoint("LEFT", -1)
+		if p.background.color.a == 51 / 255 then
+			p.background.color = {r = 255, b = 250 / 255, g = 250 / 255, a = 1}
 		end
 	end
-
-	window.frame:EnableMouse()
-	window.frame:SetScript("OnMouseDown", frameOnMouseDown)
-	LibWindow.RegisterConfig(window.frame, window.db)
 
 	if isnew then
-		LibWindow.SavePosition(window.frame)
+		SavePosition(frame, p)
 	else
-		LibWindow.RestorePosition(window.frame)
+		RestorePosition(frame, p)
 	end
 
-	window.frame:EnableMouse(true)
-	window.frame:SetMovable(true)
-	window.frame:RegisterForDrag("LeftButton")
-	window.frame:SetScript("OnDragStart", frameOnDragStart)
-	window.frame:SetScript("OnDragStop", frameOnDragStop)
+	frame:SetClampedToScreen(true)
+	frame:EnableMouse(true)
+	frame:SetMovable(true)
+	frame:RegisterForDrag("LeftButton")
+	frame:SetScript("OnMouseDown", frameOnMouseDown)
+	frame:SetScript("OnDragStart", frameOnDragStart)
+	frame:SetScript("OnDragStop", frameOnDragStop)
 
-	local titlebg = CreateFrame("Frame", "InlineTitleBackground", window.frame)
+	local titlebg = CreateFrame("Frame", "$parentTitleBackground", frame)
 	titlebg.win = window
 
-	local title = window.frame:CreateFontString("frameTitle", 6)
-	title:SetTextColor(self:GetFontColor(window.db))
-	title:SetFont(self:GetFont(window.db))
+	local title = frame:CreateFontString("frameTitle", 6)
+	title:SetTextColor(self:GetFontColor(p))
+	title:SetFont(self:GetFont(p))
 	title:SetText(window.metadata.title or "Skada")
 	title:SetWordWrap(false)
 	title:SetJustifyH("LEFT")
 	title:SetPoint("LEFT", leftmargin, -1)
 	title:SetPoint("CENTER", 0, 0)
-	title:SetHeight(window.db.height or 23)
-	window.frame.fstitle = title
-	window.frame.titlebg = titlebg
+	title:SetHeight(p.height or 23)
+	frame.fstitle = title
+	frame.titlebg = titlebg
 
 	titlebg:SetAllPoints(title)
 	titlebg:EnableMouse(true)
 	titlebg:SetScript("OnMouseDown", titleOnMouseDown)
 
-	local menu = CreateFrame("Button", "$parentMenuButton", window.frame)
+	local menu = CreateFrame("Button", "$parentMenuButton", frame)
 	menu:ClearAllPoints()
 	menu:SetSize(12, 12)
-	menu:SetNormalTexture(format(buttonTexture, window.db.title.toolbar or 1))
-	menu:SetHighlightTexture(format(buttonTexture, window.db.title.toolbar or 1), 1.0)
+	menu:SetNormalTexture(format(buttonTexture, p.title.toolbar or 1))
+	menu:SetHighlightTexture(format(buttonTexture, p.title.toolbar or 1), 1.0)
 	menu:SetAlpha(0.5)
 	menu:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-	menu:SetBackdropColor(
-		window.db.title.textcolor.r,
-		window.db.title.textcolor.g,
-		window.db.title.textcolor.b,
-		window.db.title.textcolor.a
-	)
-	menu:SetPoint("LEFT", window.frame, "LEFT", 6, 0)
-	menu:SetFrameLevel(window.frame:GetFrameLevel() + 5)
-	menu:SetBackdrop(buttonBackdrop)
+	menu:SetPoint("LEFT", frame, "LEFT", 6, 0)
+	menu:SetFrameLevel(frame:GetFrameLevel() + 5)
 	menu.win = window
 	menu:SetScript("OnClick", menuOnClick)
 
-	window.frame.menu = menu
-	window.frame.skadamenubutton = title
-	window.frame.barstartx = leftmargin + window.frame.fstitle:GetStringWidth()
+	frame.menu = menu
+	frame.skadamenubutton = title
+	frame.barstartx = leftmargin + frame.fstitle:GetStringWidth()
 
-	window.frame.win = window
-	window.frame:EnableMouse(true)
+	frame.win = window
+	window.frame = frame
 
 	--create 20 barframes
-	local temp = 25
+	local temp = 20
 	repeat
 		local bar = barlibrary:CreateBar(nil, window)
 		barlibrary.bars[temp] = bar
@@ -273,8 +253,7 @@ function mod:Destroy(win)
 	end
 end
 
-function mod:Wipe(win)
-end
+mod.Wipe = Skada.EmptyFunc
 
 function mod:SetTitle(win, title)
 	if win and win.frame then
@@ -290,7 +269,8 @@ function barlibrary:CreateBar(uuid, win)
 	bar.value = 0
 	bar.win = win
 
-	bar.bg = CreateFrame("Frame", "bg" .. bar.uuid, win.frame)
+	bar.bg = CreateFrame("Frame", "$parentBackground" .. bar.uuid, win.frame)
+	bar.bg:SetFrameLevel(win.frame:GetFrameLevel() + 6)
 	bar.label = bar.bg:CreateFontString("label" .. bar.uuid)
 	bar.label:SetFont(mod:GetFont(win.db))
 	bar.label:SetTextColor(mod:GetFontColor(win.db))
@@ -334,7 +314,7 @@ function barlibrary:Withdraw(win)
 			uuid = barlibrary.bars[#barlibrary.bars].uuid + 1
 		else
 			uuid = 1
-			print("|c0033ff99SkadaInline|r: THIS SHOULD NEVER HAPPEN")
+			print("\124c0033ff99SkadaInline\124r: THIS SHOULD NEVER HAPPEN")
 		end
 		replacement = self:CreateBar(uuid, win)
 		barlibrary.bars[#barlibrary.bars + 1] = replacement
@@ -363,7 +343,7 @@ function mod:UpdateBar(bar, bardata, db)
 	if db.isusingclasscolors and bardata.class then
 		label = classcolors(bardata.class, bardata.text or bardata.label or L["Unknown"])
 	elseif bardata.color and bardata.color.colorStr then
-		label = format("|c%s%s|r", bardata.color.colorStr, bardata.text or bardata.label or L["Unknown"])
+		label = format("\124c%s%s\124r", bardata.color.colorStr, bardata.text or bardata.label or L["Unknown"])
 	elseif bardata.color then
 		label = WrapTextInColorCode(bardata.text or bardata.label or L["Unknown"], RGBPercToHex(bardata.color.r or 1, bardata.color.g or 1, bardata.color.b or 1, true))
 	else
@@ -410,14 +390,12 @@ local function sortFunc(a, b)
 	elseif not b.label then
 		return true
 	else
-		return a.label > b.label
+		return a.label:GetText() > b.label:GetText()
 	end
 end
 
 function mod:Update(win)
-	if not win or not win.frame then
-		return
-	end
+	if not win or not win.frame then return end
 
 	local wd = win.dataset
 	for i = #wd, 1, -1 do
@@ -444,7 +422,6 @@ function mod:Update(win)
 	local left = win.frame.barstartx + 40
 
 	for key, bar in pairs(mybars) do
-		bar.bg:SetFrameLevel(9)
 		bar.bg:SetHeight(win.db.height)
 		bar.bg:SetPoint("BOTTOMLEFT", win.frame, "BOTTOMLEFT", left, 0)
 		bar.label:SetHeight(win.db.height)
@@ -517,9 +494,7 @@ function mod:GetFontColor(db)
 end
 
 function mod:ApplySettings(win)
-	if not win or not win.frame then
-		return
-	end
+	if not win or not win.frame then return end
 
 	local f = win.frame
 	local p = win.db
@@ -536,8 +511,12 @@ function mod:ApplySettings(win)
 	end
 	f.menu:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 6, p.height / 2 - 8)
 
+	f:SetClampedToScreen(p.clamped)
 	f:EnableMouse(not p.clickthrough)
 	f:SetScale(p.scale)
+
+	-- restore position
+	RestorePosition(f, p)
 
 	--ElvUI
 	if p.isusingelvuiskin and ElvUI then
@@ -727,6 +706,7 @@ function mod:AddDisplayOptions(win, options)
 end
 
 function mod:OnInitialize()
+	classcolors = classcolors or Skada.classcolors
 	self.name = L["Inline Bar Display"]
 	self.description = L["Inline display is a horizontal window style."]
 	Skada:AddDisplaySystem("inline", self)

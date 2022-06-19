@@ -1,12 +1,13 @@
 local Skada = Skada
-Skada:AddLoadableModule("Friendly Fire", function(L)
+Skada:RegisterModule("Friendly Fire", function(L, P, _, C, new, del, clear)
 	if Skada:IsDisabled("Friendly Fire") then return end
 
-	local mod = Skada:NewModule(L["Friendly Fire"])
-	local targetmod = mod:NewModule(L["Damage target list"])
-	local spellmod = mod:NewModule(L["Damage spell list"])
-	local spelltargetmod = spellmod:NewModule(L["Damage spell targets"])
+	local mod = Skada:NewModule("Friendly Fire")
+	local targetmod = mod:NewModule("Damage target list")
+	local spellmod = mod:NewModule("Damage spell list")
+	local spelltargetmod = spellmod:NewModule("Damage spell targets")
 	local ignoredSpells = Skada.dummyTable -- Edit Skada\Core\Tables.lua
+	local passiveSpells = Skada.dummyTable -- Edit Skada\Core\Tables.lua
 
 	local pairs, format = pairs, string.format
 	local GetSpellInfo, T = Skada.GetSpellInfo or GetSpellInfo, Skada.Table
@@ -15,13 +16,15 @@ Skada:AddLoadableModule("Friendly Fire", function(L)
 	local function log_damage(set, dmg)
 		local player = Skada:GetPlayer(set, dmg.playerid, dmg.playername, dmg.playerflags)
 		if player then
-			Skada:AddActiveTime(player, dmg.amount > 0)
+			if dmg.amount > 0 and dmg.spellid then
+				Skada:AddActiveTime(set, player, not passiveSpells[dmg.spellid])
+			end
 
 			player.friendfire = (player.friendfire or 0) + dmg.amount
 			set.friendfire = (set.friendfire or 0) + dmg.amount
 
 			-- to save up memory, we only record the rest to the current set.
-			if (set == Skada.total and not Skada.db.profile.totalidc) or not dmg.spellid then return end
+			if (set == Skada.total and not P.totalidc) or not dmg.spellid then return end
 
 			-- spell
 			local spell = player.friendfirespells and player.friendfirespells[dmg.spellid]
@@ -268,40 +271,53 @@ Skada:AddLoadableModule("Friendly Fire", function(L)
 			{dst_is_interesting_nopets = true, src_is_interesting_nopets = true}
 		)
 
+		Skada.RegisterMessage(self, "COMBAT_PLAYER_LEAVE", "CombatLeave")
 		Skada:AddMode(self, L["Damage Done"])
 
 		-- table of ignored spells:
-		if Skada.ignoredSpells and Skada.ignoredSpells.friendfire then
-			ignoredSpells = Skada.ignoredSpells.friendfire
+		if Skada.ignoredSpells then
+			if Skada.ignoredSpells.friendfire then
+				ignoredSpells = Skada.ignoredSpells.friendfire
+			end
+			if Skada.ignoredSpells.activeTime then
+				passiveSpells = Skada.ignoredSpells.activeTime
+			end
 		end
 	end
 
 	function mod:OnDisable()
+		Skada.UnregisterAllMessages(self)
 		Skada:RemoveMode(self)
 	end
 
 	function mod:GetSetSummary(set)
 		local value = set.friendfire or 0
-		return Skada:FormatNumber(value), value
+		local valuetext = Skada:FormatValueCols(
+			self.metadata.columns.Damage and Skada:FormatNumber(value),
+			self.metadata.columns.DPS and Skada:FormatNumber(value / set:GetTime())
+		)
+		return valuetext, value
+	end
+
+	function mod:CombatLeave()
+		T.clear(dmg)
 	end
 
 	function mod:SetComplete(set)
-		T.clear(dmg)
-
-		if (set.friendfire or 0) == 0 then return end
+		if not set.friendfire or set.friendfire == 0 then return end
 		for i = 1, #set.players do
 			local p = set.players[i]
-			if p and p.friendfire and p.friendfire == 0 then
-				p.friendfirespells = nil
+			if p and (p.friendfire == 0 or (not p.friendfire and p.friendfirespells)) then
+				p.friendfire, p.friendfirespells = nil, del(p.friendfirespells, true)
 			elseif p and p.friendfirespells then
 				for spellid, spell in pairs(p.friendfirespells) do
 					if spell.amount == 0 then
-						p.friendfirespells[spellid] = nil
+						p.friendfirespells[spellid] = del(p.friendfirespells[spellid])
 					end
-					-- nothing left?!
-					if next(p.friendfirespells) == nil then
-						p.friendfirespells = nil
-					end
+				end
+				-- nothing left?!
+				if next(p.friendfirespells) == nil then
+					p.friendfirespells = del(p.friendfirespells)
 				end
 			end
 		end
@@ -309,27 +325,25 @@ Skada:AddLoadableModule("Friendly Fire", function(L)
 
 	do
 		local playerPrototype = Skada.playerPrototype
-		local cacheTable = Skada.cacheTable
-		local wipe = wipe
-
 		function playerPrototype:GetFriendlyFireTargets(tbl)
 			if self.friendfirespells then
-				tbl = wipe(tbl or cacheTable)
+				tbl = clear(tbl or C)
 				for _, spell in pairs(self.friendfirespells) do
 					if spell.targets then
 						for name, amount in pairs(spell.targets) do
-							if not cacheTable[name] then
-								cacheTable[name] = {amount = amount}
+							if not tbl[name] then
+								tbl[name] = new()
+								tbl[name].amount = amount
 							else
-								cacheTable[name].amount = cacheTable[name].amount + amount
+								tbl[name].amount = tbl[name].amount + amount
 							end
-							if not cacheTable[name].class then
+							if not tbl[name].class then
 								local actor = self.super:GetActor(name)
 								if actor then
-									cacheTable[name].id = actor.id
-									cacheTable[name].class = actor.class
-									cacheTable[name].role = actor.role
-									cacheTable[name].spec = actor.spec
+									tbl[name].id = actor.id
+									tbl[name].class = actor.class
+									tbl[name].role = actor.role
+									tbl[name].spec = actor.spec
 								end
 							end
 						end
