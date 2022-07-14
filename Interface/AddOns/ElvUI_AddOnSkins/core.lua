@@ -13,8 +13,6 @@ local addonList = {
 	"Omen",
 	"Recount",
 	"SexyCooldown",
-	"DBM",
-	"Auctionator",
 	"BugSack",
 	"CallToArms",
 	"Postal",
